@@ -1,6 +1,7 @@
 "use client";
 
-import { Crown, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { Crown, TrendingUp, Shield, Zap } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 
 interface HeaderProps {
@@ -9,41 +10,37 @@ interface HeaderProps {
 
 export default function Header({ rate }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-[#0a0a0f]/80 border-b border-[#1e1e2e]">
+    <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-[#0a0a0f]/90 border-b border-[#1e1e2e]">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Left: Logo */}
-        <div className="flex items-center gap-2">
-          <Crown className="w-8 h-8 text-emerald-500" />
-          <span className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-1.5 shadow-[0_0_15px_rgba(16,185,129,0.4)] group-hover:scale-105 transition-transform">
+            <Crown className="w-6 h-6 text-[#0a0a0f] fill-[#0a0a0f]" />
+          </div>
+          <span className="text-xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-500 bg-clip-text text-transparent tracking-tight">
             KingMC Shop
           </span>
-        </div>
+        </Link>
 
-        {/* Center: Rate */}
-        <div className="hidden sm:flex items-center gap-2 bg-[#12121a] border border-[#1e1e2e] px-4 py-1.5 rounded-full">
-          <TrendingUp className="w-4 h-4 text-emerald-500" />
-          <span className="text-sm font-medium text-zinc-300">
-            Tỷ giá: <span className="text-emerald-400 font-bold">{rate ? formatVND(rate) : "---"} / 1M</span>
+        {/* Center: Prominent Live Rate Badge */}
+        <div className="flex items-center gap-2 bg-[#12121a] border border-emerald-500/40 px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.15)] animate-pulse">
+          <Zap className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+          <span className="text-xs sm:text-sm font-semibold text-zinc-200">
+            Tỷ giá hôm nay: <span className="text-emerald-400 font-extrabold text-sm sm:text-base">{rate ? formatVND(rate) : "10,000đ"} / 1M</span>
           </span>
         </div>
 
-        {/* Right: Auth Buttons */}
-        <div className="flex items-center gap-3">
-          <a href="#" className="text-sm font-medium text-zinc-400 hover:text-zinc-100 transition-colors">
-            Đăng nhập
-          </a>
-          <a href="#" className="hidden sm:inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-[#0a0a0f] bg-emerald-500 hover:bg-emerald-400 rounded-md transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)]">
-            Đăng ký
-          </a>
+        {/* Right: Quick Admin link & Info */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin"
+            className="flex items-center gap-1.5 rounded-lg border border-[#1e1e2e] bg-[#12121a] hover:bg-[#1e1e2e] px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:text-emerald-400 transition-all"
+            title="Dành cho Quản trị viên"
+          >
+            <Shield size={14} className="text-emerald-500" />
+            <span className="hidden sm:inline">Quản Trị</span>
+          </Link>
         </div>
-      </div>
-      
-      {/* Mobile Rate */}
-      <div className="sm:hidden flex items-center justify-center py-2 bg-[#12121a] border-t border-[#1e1e2e]">
-        <TrendingUp className="w-4 h-4 text-emerald-500 mr-2" />
-        <span className="text-xs font-medium text-zinc-300">
-          Tỷ giá: <span className="text-emerald-400 font-bold">{rate ? formatVND(rate) : "---"} / 1M</span>
-        </span>
       </div>
     </header>
   );

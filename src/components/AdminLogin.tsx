@@ -57,12 +57,13 @@ export default function AdminLogin({ onLogin }: AdminLoginProps) {
                 type="password"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
-                placeholder="Nhập mã PIN"
+                placeholder="Nhập mã PIN bí mật (Mặc định: 123456)"
                 className="block w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] py-3 pl-11 pr-4 text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
                 required
               />
             </div>
             {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+            <p className="mt-2 text-xs text-zinc-500">Mã PIN cấu hình tại biến môi trường <code>ADMIN_PIN</code></p>
           </div>
 
           <button

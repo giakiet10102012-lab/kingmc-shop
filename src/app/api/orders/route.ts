@@ -4,13 +4,14 @@ import { generateOrderId } from '@/lib/utils';
 
 const getServiceClient = () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  if (!supabaseUrl || !supabaseKey) return null;
   return createClient(supabaseUrl, supabaseKey);
 };
 
 const checkAdmin = (req: Request) => {
   const pin = req.headers.get('x-admin-pin');
-  return pin === process.env.ADMIN_PIN;
+  return pin === (process.env.ADMIN_PIN || '123456');
 };
 
 export async function POST(req: Request) {
@@ -22,6 +23,9 @@ export async function POST(req: Request) {
     }
 
     const supabase = getServiceClient();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Chưa cấu hình Supabase URL hoặc Key trên Vercel.' }, { status: 500 });
+    }
     const id = generateOrderId();
     
     const { data, error } = await supabase

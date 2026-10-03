@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Settings, 
   ShoppingBag, 
@@ -9,8 +9,17 @@ import {
   XCircle,
   Check,
   X,
-  ChevronDown,
-  ChevronUp
+  RefreshCw,
+  Coins,
+  DollarSign,
+  Search,
+  BellRing,
+  Building2,
+  TrendingUp,
+  AlertTriangle,
+  QrCode,
+  Save,
+  Radio
 } from 'lucide-react';
 import { Order, ShopSettings } from '@/lib/types';
 import { cn, formatNumber, formatVND, getStatusColor, getStatusLabel } from '@/lib/utils';
@@ -20,37 +29,68 @@ interface AdminDashboardProps {
   pin: string;
 }
 
+const POPULAR_BANKS = [
+  { id: 'MB', name: 'MB Bank (Quân Đội)' },
+  { id: 'VCB', name: 'Vietcombank' },
+  { id: 'TCB', name: 'Techcombank' },
+  { id: 'ACB', name: 'ACB (Á Châu)' },
+  { id: 'VPB', name: 'VPBank' },
+  { id: 'TPB', name: 'TPBank' },
+  { id: 'BIDV', name: 'BIDV' },
+  { id: 'ICB', name: 'VietinBank' },
+  { id: 'VBA', name: 'Agribank' },
+  { id: 'STB', name: 'Sacombank' },
+  { id: 'MSB', name: 'MSB' },
+  { id: 'OCB', name: 'OCB' },
+];
+
 export default function AdminDashboard({ pin }: AdminDashboardProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [settings, setSettings] = useState<ShopSettings>({
-    rate_per_m: 0,
-    bank_name: '',
-    bank_id: '',
-    bank_account: '',
-    bank_owner: ''
+    rate_per_m: 10000,
+    bank_name: 'MB Bank',
+    bank_id: 'MB',
+    bank_account: '0123456789',
+    bank_owner: 'NGUYEN VAN A',
+    shop_notice: '',
+    is_active: true
   });
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
+
+  const [activeTab, setActiveTab] = useState<'all' | 'paid_waiting' | 'pending' | 'completed' | 'cancelled'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [cancelDropdown, setCancelDropdown] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showPreviewQr, setShowPreviewQr] = useState(false);
 
+  // Fetch orders
   const fetchOrders = async () => {
+    setIsRefreshing(true);
     try {
       const res = await fetch('/api/orders?status=all', { headers: { 'x-admin-pin': pin } });
-      const data = await res.json();
-      if (res.ok) setOrders(data);
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(data);
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Fetch orders error:', e);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
+  // Fetch settings
   const fetchSettings = async () => {
     try {
       const res = await fetch('/api/config');
-      const data = await res.json();
-      if (res.ok) setSettings(data);
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(prev => ({ ...prev, ...data }));
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Fetch settings error:', e);
     }
   };
 
@@ -58,7 +98,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     fetchOrders();
     fetchSettings();
 
-    const channel = supabase.channel('orders')
+    // Supabase Realtime subscription
+    const channel = supabase.channel('admin-orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         fetchOrders();
       })
@@ -69,197 +110,604 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     };
   }, [pin]);
 
+  // Save Settings
   const saveSettings = async () => {
+    setIsSaving(true);
+    setSaveSuccess(false);
     try {
-      await fetch('/api/config', {
+      const res = await fetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
         body: JSON.stringify(settings)
       });
-      alert('Đã lưu cài đặt!');
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 4000);
+      } else {
+        const err = await res.json();
+        alert('Lỗi lưu cài đặt: ' + (err.error || 'Vui lòng thử lại'));
+      }
     } catch (e) {
-      alert('Lỗi lưu cài đặt');
+      alert('Không thể kết nối đến máy chủ.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  // Update order status
   const updateOrderStatus = async (id: string, status: string, reason?: string) => {
     try {
-      await fetch('/api/orders', {
+      const res = await fetch('/api/orders', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
         body: JSON.stringify({ id, status, cancel_reason: reason })
       });
-      setCancelDropdown(null);
-      setCancelReason('');
-      fetchOrders();
+      if (res.ok) {
+        setCancelDropdown(null);
+        setCancelReason('');
+        fetchOrders();
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Update order status error:', e);
     }
   };
 
-  const stats = {
-    total: orders.length,
-    pending: orders.filter(o => o.status === 'pending' || o.status === 'paid_waiting').length,
-    completed: orders.filter(o => o.status === 'completed').length,
-    cancelled: orders.filter(o => o.status === 'cancelled').length,
+  // Quick Bank Selection
+  const handleSelectBank = (bank: { id: string; name: string }) => {
+    setSettings(prev => ({
+      ...prev,
+      bank_id: bank.id,
+      bank_name: bank.name
+    }));
   };
 
-  const filteredOrders = orders.filter(o => {
-    if (activeTab === 'all') return true;
-    if (activeTab === 'pending') return o.status === 'pending' || o.status === 'paid_waiting';
-    return o.status === activeTab;
-  });
+  // Financial Stats
+  const stats = useMemo(() => {
+    const completedOrders = orders.filter(o => o.status === 'completed');
+    const totalRevenue = completedOrders.reduce((acc, curr) => acc + (Number(curr.total_vnd) || 0), 0);
+    const totalM = completedOrders.reduce((acc, curr) => acc + (Number(curr.money_m) || 0), 0);
 
-  const cancelReasonsList = ['Sai nội dung CK', 'Chưa nhận được tiền', 'Khách yêu cầu hủy'];
+    return {
+      total: orders.length,
+      waitingAdmin: orders.filter(o => o.status === 'paid_waiting').length,
+      pending: orders.filter(o => o.status === 'pending').length,
+      completed: completedOrders.length,
+      cancelled: orders.filter(o => o.status === 'cancelled').length,
+      totalRevenue,
+      totalM
+    };
+  }, [orders]);
+
+  // Filtered orders
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      // Tab filter
+      if (activeTab === 'paid_waiting' && o.status !== 'paid_waiting') return false;
+      if (activeTab === 'pending' && o.status !== 'pending') return false;
+      if (activeTab === 'completed' && o.status !== 'completed') return false;
+      if (activeTab === 'cancelled' && o.status !== 'cancelled') return false;
+
+      // Search term filter (IGN or Order ID)
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase().trim();
+        const matchId = o.id.toLowerCase().includes(term);
+        const matchIgn = o.ign.toLowerCase().includes(term);
+        return matchId || matchIgn;
+      }
+      return true;
+    });
+  }, [orders, activeTab, searchTerm]);
+
+  const cancelReasonsList = [
+    'Sai nội dung chuyển khoản',
+    'Chưa nhận được tiền',
+    'Không tìm thấy món đồ trên /ah',
+    'Khách yêu cầu hủy đơn',
+    'Sai số tiền chuyển'
+  ];
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] p-4 text-zinc-100 md:p-8">
       <div className="mx-auto max-w-7xl space-y-8">
-        
-        {/* Settings Panel */}
-        <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] overflow-hidden">
-          <button 
-            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-            className="flex w-full items-center justify-between p-6 focus:outline-none"
-          >
-            <div className="flex items-center gap-3">
-              <Settings className="text-emerald-500" />
-              <h2 className="text-xl font-bold">Cài Đặt Hệ Thống</h2>
+
+        {/* Top Control Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#1e1e2e] bg-[#12121a] p-4 shadow-lg">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500"></span>
+              </span>
+              <span className="text-sm font-semibold text-emerald-400">Realtime Sync</span>
             </div>
-            {isSettingsOpen ? <ChevronUp /> : <ChevronDown />}
+
+            <div className="h-4 w-px bg-[#1e1e2e] hidden sm:block"></div>
+
+            <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs sm:text-sm font-medium text-emerald-400">
+              <TrendingUp size={14} />
+              <span>Tỷ giá hiện tại: <strong>{formatVND(settings.rate_per_m)} / 1M</strong></span>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-full border border-[#1e1e2e] bg-[#0a0a0f] px-3 py-1 text-xs text-zinc-400">
+              <span>Trạng thái Shop: </span>
+              <span className={cn("font-bold", settings.is_active !== false ? "text-emerald-400" : "text-amber-400")}>
+                {settings.is_active !== false ? "🟢 Mở cửa" : "🟡 Tạm đóng"}
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={fetchOrders}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] px-3 py-1.5 text-xs sm:text-sm font-medium text-zinc-300 transition-colors hover:border-emerald-500/50 hover:text-emerald-400 disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={cn(isRefreshing && "animate-spin text-emerald-500")} />
+            <span>Làm mới</span>
           </button>
-          
-          {isSettingsOpen && (
-            <div className="border-t border-[#1e1e2e] p-6">
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Tỷ giá (VNĐ/1M)</label>
-                  <input type="number" value={settings.rate_per_m} onChange={e => setSettings({...settings, rate_per_m: Number(e.target.value)})} className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-3 text-zinc-100 outline-none focus:border-emerald-500" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Tên ngân hàng</label>
-                  <input type="text" value={settings.bank_name} onChange={e => setSettings({...settings, bank_name: e.target.value})} className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-3 text-zinc-100 outline-none focus:border-emerald-500" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Mã ngân hàng (VietQR)</label>
-                  <input type="text" value={settings.bank_id} onChange={e => setSettings({...settings, bank_id: e.target.value})} className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-3 text-zinc-100 outline-none focus:border-emerald-500" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Số tài khoản</label>
-                  <input type="text" value={settings.bank_account} onChange={e => setSettings({...settings, bank_account: e.target.value})} className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-3 text-zinc-100 outline-none focus:border-emerald-500" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">Chủ tài khoản</label>
-                  <input type="text" value={settings.bank_owner} onChange={e => setSettings({...settings, bank_owner: e.target.value})} className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-3 text-zinc-100 outline-none focus:border-emerald-500" />
-                </div>
+        </div>
+
+        {/* 6 Key Statistics Cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:p-5">
+            <div className="flex items-center justify-between text-emerald-400">
+              <span className="text-xs font-medium text-zinc-400">Doanh Thu</span>
+              <DollarSign size={18} />
+            </div>
+            <p className="mt-2 text-lg sm:text-xl font-black text-emerald-400">{formatVND(stats.totalRevenue)}</p>
+            <p className="text-[11px] text-zinc-500">Đơn hoàn thành</p>
+          </div>
+
+          <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 sm:p-5">
+            <div className="flex items-center justify-between text-blue-400">
+              <span className="text-xs font-medium text-zinc-400">Money Đã Bán</span>
+              <Coins size={18} />
+            </div>
+            <p className="mt-2 text-lg sm:text-xl font-black text-blue-400">{formatNumber(stats.totalM)} M</p>
+            <p className="text-[11px] text-zinc-500">Trong server KingMC</p>
+          </div>
+
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5 relative">
+            <div className="flex items-center justify-between text-amber-400">
+              <span className="text-xs font-medium text-zinc-400">Chờ Mua AH</span>
+              <Clock size={18} />
+            </div>
+            <p className="mt-2 text-xl sm:text-2xl font-black text-amber-400">{stats.waitingAdmin}</p>
+            {stats.waitingAdmin > 0 && (
+              <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-amber-400 animate-ping"></span>
+            )}
+            <p className="text-[11px] text-amber-400/80 font-medium">Cần xử lý ngay</p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-700/50 bg-[#12121a] p-4 sm:p-5">
+            <div className="flex items-center justify-between text-zinc-400">
+              <span className="text-xs font-medium text-zinc-400">Chờ Chuyển Tiền</span>
+              <ShoppingBag size={18} />
+            </div>
+            <p className="mt-2 text-xl sm:text-2xl font-black text-zinc-300">{stats.pending}</p>
+            <p className="text-[11px] text-zinc-500">Chưa xác nhận CK</p>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-500/20 bg-[#12121a] p-4 sm:p-5">
+            <div className="flex items-center justify-between text-emerald-400">
+              <span className="text-xs font-medium text-zinc-400">Đã Hoàn Thành</span>
+              <CheckCircle2 size={18} />
+            </div>
+            <p className="mt-2 text-xl sm:text-2xl font-black text-zinc-100">{stats.completed}</p>
+            <p className="text-[11px] text-zinc-500">Giao dịch xong</p>
+          </div>
+
+          <div className="rounded-2xl border border-red-500/20 bg-[#12121a] p-4 sm:p-5">
+            <div className="flex items-center justify-between text-red-400">
+              <span className="text-xs font-medium text-zinc-400">Đã Hủy</span>
+              <XCircle size={18} />
+            </div>
+            <p className="mt-2 text-xl sm:text-2xl font-black text-red-400">{stats.cancelled}</p>
+            <p className="text-[11px] text-zinc-500">Đơn lỗi / từ chối</p>
+          </div>
+        </div>
+
+        {/* SETTINGS PANEL: Điều chỉnh toàn bộ Website */}
+        <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] shadow-xl overflow-hidden">
+          <div className="border-b border-[#1e1e2e] bg-[#0e0e16] p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/10 p-2.5 text-emerald-400 border border-emerald-500/20">
+                <Settings className="h-5 w-5" />
               </div>
-              <button onClick={saveSettings} className="mt-6 rounded-xl bg-emerald-500 px-6 py-2.5 font-semibold text-white hover:bg-emerald-600 transition-colors">
-                Lưu Cài Đặt
+              <div>
+                <h2 className="text-lg sm:text-xl font-bold text-white">Bảng Điều Khiển Hệ Thống (CMS)</h2>
+                <p className="text-xs sm:text-sm text-zinc-400">Điều chỉnh Tỷ giá, Tài khoản Ngân hàng VietQR và Thông báo Shop</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {saveSuccess && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-3 py-1.5 text-xs sm:text-sm font-semibold text-emerald-400 animate-fade-in">
+                  <Check size={16} />
+                  <span>Đã lưu thành công!</span>
+                </div>
+              )}
+              <button 
+                onClick={saveSettings}
+                disabled={isSaving}
+                className="flex items-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 px-5 py-2.5 text-sm font-bold text-[#0a0a0f] transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] disabled:opacity-50"
+              >
+                <Save size={16} />
+                <span>{isSaving ? "Đang lưu..." : "LƯU CÀI ĐẶT"}</span>
               </button>
             </div>
-          )}
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Row 1: Tỷ Giá & Trạng Thái */}
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Tỷ giá */}
+              <div className="space-y-3 rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                    <TrendingUp size={16} />
+                    <span>Tỷ giá quy đổi (VNĐ / 1M)</span>
+                  </label>
+                  <span className="text-xs text-zinc-400">Khách trả cho mỗi 1M</span>
+                </div>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    value={settings.rate_per_m} 
+                    onChange={e => setSettings({...settings, rate_per_m: Number(e.target.value)})}
+                    placeholder="VD: 10000"
+                    className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-lg font-bold text-emerald-400 outline-none focus:border-emerald-500 transition-colors"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-zinc-400">
+                    VNĐ / 1M
+                  </div>
+                </div>
+
+                {/* Quick adjustment buttons */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {[5000, 8000, 10000, 12000, 15000, 20000].map(val => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setSettings({...settings, rate_per_m: val})}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors",
+                        settings.rate_per_m === val 
+                          ? "bg-emerald-500 text-[#0a0a0f]" 
+                          : "border border-[#1e1e2e] bg-[#12121a] text-zinc-300 hover:border-emerald-500/40"
+                      )}
+                    >
+                      {formatVND(val)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Live Preview calculation */}
+                <div className="rounded-lg bg-[#12121a] p-3 text-xs text-zinc-400 border border-[#1e1e2e]/50 flex justify-between items-center">
+                  <span>Mẫu thử: <strong>10M</strong> sẽ có giá:</span>
+                  <span className="font-bold text-emerald-400 text-sm">{formatVND(settings.rate_per_m * 10)}</span>
+                </div>
+              </div>
+
+              {/* Trạng thái Shop & Thông báo */}
+              <div className="space-y-3 rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                    <Radio size={16} className="text-emerald-400" />
+                    <span>Trạng thái mở cửa Shop</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setSettings({...settings, is_active: settings.is_active === false ? true : false})}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-xs font-bold transition-all",
+                      settings.is_active !== false 
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40" 
+                        : "bg-red-500/20 text-red-400 border border-red-500/40"
+                    )}
+                  >
+                    {settings.is_active !== false ? "Đang nhận đơn (Bật)" : "Tạm ngưng nhận đơn (Tắt)"}
+                  </button>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <label className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
+                    <BellRing size={14} className="text-amber-400" />
+                    <span>Thông báo ghim đầu trang chủ (Tùy chọn)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.shop_notice || ''}
+                    onChange={e => setSettings({...settings, shop_notice: e.target.value})}
+                    placeholder="VD: Server KingMC vừa cập nhật Season mới, nạp tiền duyệt siêu tốc 24/7!"
+                    className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-emerald-500"
+                  />
+                  <p className="text-[11px] text-zinc-500">Để trống nếu không muốn hiển thị banner thông báo.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Cấu hình Tài Khoản Ngân Hàng & VietQR */}
+            <div className="rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-[#1e1e2e] pb-3">
+                <div className="flex items-center gap-2">
+                  <Building2 className="text-blue-400" size={18} />
+                  <span className="text-sm font-bold text-zinc-200">Thông tin Ngân Hàng Nhận Tiền & VietQR</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPreviewQr(!showPreviewQr)}
+                  className="flex items-center gap-1.5 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-2.5 py-1 text-xs text-zinc-300 hover:text-emerald-400"
+                >
+                  <QrCode size={14} />
+                  <span>{showPreviewQr ? "Ẩn QR test" : "Xem thử mã VietQR"}</span>
+                </button>
+              </div>
+
+              {/* Quick Select Popular Bank */}
+              <div>
+                <span className="text-xs text-zinc-400 block mb-2">Chọn nhanh ngân hàng phổ biến:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {POPULAR_BANKS.map(b => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => handleSelectBank(b)}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-medium transition-all",
+                        settings.bank_id === b.id
+                          ? "bg-blue-500 text-white font-bold"
+                          : "border border-[#1e1e2e] bg-[#12121a] text-zinc-400 hover:text-zinc-200 hover:border-blue-500/40"
+                      )}
+                    >
+                      {b.id}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400">Tên ngân hàng</label>
+                  <input 
+                    type="text" 
+                    value={settings.bank_name} 
+                    onChange={e => setSettings({...settings, bank_name: e.target.value})} 
+                    className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-sm text-zinc-100 outline-none focus:border-blue-500" 
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400">Mã ngân hàng (Mã VietQR)</label>
+                  <input 
+                    type="text" 
+                    value={settings.bank_id} 
+                    onChange={e => setSettings({...settings, bank_id: e.target.value.toUpperCase()})} 
+                    className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-sm font-mono text-emerald-400 outline-none focus:border-blue-500" 
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400">Số tài khoản</label>
+                  <input 
+                    type="text" 
+                    value={settings.bank_account} 
+                    onChange={e => setSettings({...settings, bank_account: e.target.value})} 
+                    className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-sm font-mono text-amber-400 outline-none focus:border-blue-500" 
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-400">Tên chủ tài khoản (Viết hoa không dấu)</label>
+                  <input 
+                    type="text" 
+                    value={settings.bank_owner} 
+                    onChange={e => setSettings({...settings, bank_owner: e.target.value.toUpperCase()})} 
+                    className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-sm uppercase text-zinc-100 outline-none focus:border-blue-500" 
+                  />
+                </div>
+              </div>
+
+              {/* VietQR Live Preview Box */}
+              {showPreviewQr && (
+                <div className="rounded-xl border border-[#1e1e2e] bg-[#12121a] p-4 flex flex-col sm:flex-row items-center gap-4">
+                  <img
+                    src={`https://img.vietqr.io/image/${settings.bank_id}-${settings.bank_account}-compact2.png?amount=50000&addInfo=KMC9999%20Test&accountName=${encodeURIComponent(settings.bank_owner)}`}
+                    alt="VietQR Preview"
+                    className="w-40 h-auto rounded-lg border border-white/10"
+                  />
+                  <div className="text-xs text-zinc-400 space-y-1">
+                    <p className="font-bold text-zinc-200 text-sm">Xem thử cấu hình VietQR:</p>
+                    <p>Ngân hàng: <span className="text-zinc-100">{settings.bank_name} ({settings.bank_id})</span></p>
+                    <p>Số tài khoản: <span className="text-amber-400 font-mono">{settings.bank_account}</span></p>
+                    <p>Chủ tài khoản: <span className="text-emerald-400 font-bold">{settings.bank_owner}</span></p>
+                    <p className="text-[11px] text-zinc-500 pt-2">Khi khách mua hàng, mã QR sẽ tự động điền đúng Số Tiền và Cú pháp [Mã đơn] [Tên Ingame].</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] p-6 flex items-center gap-4">
-            <div className="rounded-full bg-blue-500/10 p-3 text-blue-500"><ShoppingBag size={24} /></div>
-            <div><p className="text-sm text-zinc-400">Tổng đơn</p><p className="text-2xl font-bold">{stats.total}</p></div>
-          </div>
-          <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] p-6 flex items-center gap-4">
-            <div className="rounded-full bg-amber-500/10 p-3 text-amber-500"><Clock size={24} /></div>
-            <div><p className="text-sm text-zinc-400">Chờ duyệt</p><p className="text-2xl font-bold">{stats.pending}</p></div>
-          </div>
-          <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] p-6 flex items-center gap-4">
-            <div className="rounded-full bg-emerald-500/10 p-3 text-emerald-500"><CheckCircle2 size={24} /></div>
-            <div><p className="text-sm text-zinc-400">Hoàn thành</p><p className="text-2xl font-bold">{stats.completed}</p></div>
-          </div>
-          <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] p-6 flex items-center gap-4">
-            <div className="rounded-full bg-red-500/10 p-3 text-red-500"><XCircle size={24} /></div>
-            <div><p className="text-sm text-zinc-400">Đã hủy</p><p className="text-2xl font-bold">{stats.cancelled}</p></div>
-          </div>
-        </div>
+        {/* ORDERS MANAGEMENT TABLE */}
+        <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] shadow-xl overflow-hidden">
+          {/* Header & Filter Controls */}
+          <div className="border-b border-[#1e1e2e] p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>Danh Sách Đơn Hàng</span>
+                <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400">{filteredOrders.length}</span>
+              </h2>
+              <p className="text-xs text-zinc-400">Tự động cập nhật thời gian thực khi khách tạo đơn</p>
+            </div>
 
-        {/* Orders Table */}
-        <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a]">
-          <div className="border-b border-[#1e1e2e] p-4 flex gap-4 overflow-x-auto">
-            {['all', 'pending', 'completed', 'cancelled'].map(tab => (
+            {/* Search Input */}
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Tìm mã đơn hoặc IGN..."
+                className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] pl-9 pr-4 py-2 text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="border-b border-[#1e1e2e] px-4 py-2 flex gap-2 overflow-x-auto bg-[#0e0e16]">
+            {[
+              { id: 'all', label: 'Tất cả', count: stats.total },
+              { id: 'paid_waiting', label: '⚡ Chờ Mua AH', count: stats.waitingAdmin, highlight: true },
+              { id: 'pending', label: 'Chờ thanh toán', count: stats.pending },
+              { id: 'completed', label: 'Đã hoàn thành', count: stats.completed },
+              { id: 'cancelled', label: 'Đã hủy', count: stats.cancelled },
+            ].map(tab => (
               <button 
-                key={tab} 
-                onClick={() => setActiveTab(tab)}
-                className={cn("whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-colors", activeTab === tab ? "bg-[#1e1e2e] text-zinc-100" : "text-zinc-400 hover:text-zinc-200 hover:bg-[#1e1e2e]/50")}
+                key={tab.id} 
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "whitespace-nowrap px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5",
+                  activeTab === tab.id 
+                    ? "bg-[#1e1e2e] text-emerald-400 border border-emerald-500/30" 
+                    : "text-zinc-400 hover:text-zinc-200 hover:bg-[#1e1e2e]/50",
+                  tab.highlight && tab.count > 0 && "text-amber-400 font-bold"
+                )}
               >
-                {tab === 'all' ? 'Tất cả' : tab === 'pending' ? 'Chờ duyệt' : tab === 'completed' ? 'Hoàn thành' : 'Đã hủy'}
+                <span>{tab.label}</span>
+                <span className={cn(
+                  "px-1.5 py-0.2 rounded text-[11px]",
+                  tab.highlight && tab.count > 0 ? "bg-amber-500/20 text-amber-300" : "bg-black/30 text-zinc-400"
+                )}>
+                  {tab.count}
+                </span>
               </button>
             ))}
           </div>
           
+          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-[#1e1e2e]/50 text-zinc-400">
+              <thead className="bg-[#1e1e2e]/40 text-zinc-400 text-xs">
                 <tr>
-                  <th className="p-4 font-medium">Mã Đơn</th>
-                  <th className="p-4 font-medium">Thời Gian</th>
-                  <th className="p-4 font-medium">IGN</th>
-                  <th className="p-4 font-medium">Số M</th>
-                  <th className="p-4 font-medium">Tổng VNĐ</th>
-                  <th className="p-4 font-medium">Trạng Thái</th>
-                  <th className="p-4 font-medium">Thao tác</th>
+                  <th className="p-4 font-semibold">Mã Đơn</th>
+                  <th className="p-4 font-semibold">Thời Gian</th>
+                  <th className="p-4 font-semibold">Tên Ingame (IGN)</th>
+                  <th className="p-4 font-semibold">Số M Mua</th>
+                  <th className="p-4 font-semibold">Tổng Tiền</th>
+                  <th className="p-4 font-semibold">Trạng Thái</th>
+                  <th className="p-4 font-semibold text-right">Thao Tác Admin</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e1e2e]">
                 {filteredOrders.map(order => (
-                  <tr key={order.id} className="hover:bg-[#1e1e2e]/20">
-                    <td className="p-4 font-mono text-emerald-500">{order.id}</td>
-                    <td className="p-4 text-zinc-400">{new Date(order.created_at).toLocaleString('vi-VN')}</td>
-                    <td className="p-4 font-medium">{order.ign}</td>
-                    <td className="p-4">{formatNumber(order.money_m)}M</td>
-                    <td className="p-4 text-amber-500">{formatVND(order.total_vnd)}</td>
+                  <tr key={order.id} className="hover:bg-[#1e1e2e]/30 transition-colors">
+                    <td className="p-4 font-mono font-bold text-emerald-400">
+                      {order.id}
+                    </td>
+                    <td className="p-4 text-xs text-zinc-400 whitespace-nowrap">
+                      {new Date(order.created_at).toLocaleString('vi-VN')}
+                    </td>
                     <td className="p-4">
-                      <span className={cn("inline-block rounded-full px-3 py-1 text-xs font-medium", getStatusColor(order.status))}>
+                      <span className="font-semibold text-zinc-100 bg-[#0a0a0f] border border-[#1e1e2e] px-2.5 py-1 rounded-md">
+                        {order.ign}
+                      </span>
+                    </td>
+                    <td className="p-4 font-bold text-zinc-100">
+                      {formatNumber(order.money_m)} M
+                    </td>
+                    <td className="p-4 font-bold text-amber-400">
+                      {formatVND(order.total_vnd)}
+                    </td>
+                    <td className="p-4">
+                      <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs font-medium border", getStatusColor(order.status))}>
                         {getStatusLabel(order.status)}
                       </span>
                       {order.cancel_reason && (
-                         <div className="mt-1 text-xs text-red-400">{order.cancel_reason}</div>
+                         <div className="mt-1 text-[11px] text-red-400 italic">Lý do: {order.cancel_reason}</div>
                       )}
                     </td>
-                    <td className="p-4">
-                      {(order.status === 'pending' || order.status === 'paid_waiting') && (
-                        <div className="flex gap-2 relative">
-                          {order.status === 'paid_waiting' && (
-                            <button onClick={() => updateOrderStatus(order.id, 'completed')} title="Xác Nhận Đã Mua AH" className="flex items-center gap-1 rounded bg-emerald-500/20 px-2 py-1 text-emerald-500 hover:bg-emerald-500/30">
-                              <Check size={16} /> <span className="hidden xl:inline">Xác Nhận Đã Mua AH</span>
-                            </button>
-                          )}
+                    <td className="p-4 text-right">
+                      {(order.status === 'pending' || order.status === 'paid_waiting') ? (
+                        <div className="flex items-center justify-end gap-2 relative">
+                          {/* Nút Xác nhận đã mua AH */}
+                          <button 
+                            onClick={() => updateOrderStatus(order.id, 'completed')} 
+                            title="Admin vào game mua món đồ /ah của khách xong bấm nút này" 
+                            className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-bold text-[#0a0a0f] transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                          >
+                            <Check size={14} /> 
+                            <span>ĐÃ MUA AH</span>
+                          </button>
+
+                          {/* Nút Hủy Đơn */}
                           <div className="relative">
-                            <button onClick={() => setCancelDropdown(cancelDropdown === order.id ? null : order.id)} title="Hủy Đơn" className="flex items-center gap-1 rounded bg-red-500/20 px-2 py-1 text-red-500 hover:bg-red-500/30">
-                              <X size={16} /> <span className="hidden xl:inline">Hủy Đơn</span>
+                            <button 
+                              onClick={() => setCancelDropdown(cancelDropdown === order.id ? null : order.id)} 
+                              title="Hủy đơn hàng" 
+                              className="flex items-center gap-1 rounded-lg bg-red-500/10 border border-red-500/30 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                            >
+                              <X size={14} /> 
+                              <span>Hủy</span>
                             </button>
                             
+                            {/* Cancel Dropdown Modal */}
                             {cancelDropdown === order.id && (
-                              <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-3 shadow-xl z-10">
-                                <p className="mb-2 text-xs font-medium text-zinc-400">Lý do hủy:</p>
+                              <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-3 shadow-2xl z-20 text-left">
+                                <p className="mb-2 text-xs font-bold text-zinc-300">Chọn lý do hủy đơn:</p>
                                 <div className="space-y-1 mb-2">
                                   {cancelReasonsList.map(r => (
-                                    <button key={r} onClick={() => setCancelReason(r)} className={cn("block w-full text-left rounded p-2 text-sm", cancelReason === r ? "bg-[#1e1e2e] text-white" : "text-zinc-400 hover:bg-[#1e1e2e]/50")}>{r}</button>
+                                    <button 
+                                      key={r} 
+                                      onClick={() => setCancelReason(r)} 
+                                      className={cn(
+                                        "block w-full text-left rounded-lg p-2 text-xs transition-colors", 
+                                        cancelReason === r ? "bg-red-500/20 text-red-300 border border-red-500/40" : "text-zinc-400 hover:bg-[#1e1e2e]"
+                                      )}
+                                    >
+                                      {r}
+                                    </button>
                                   ))}
                                 </div>
-                                <input type="text" placeholder="Lý do khác..." value={cancelReason} onChange={e => setCancelReason(e.target.value)} className="mb-2 w-full rounded border border-[#1e1e2e] bg-[#0a0a0f] p-2 text-sm text-white outline-none focus:border-red-500" />
+                                <input 
+                                  type="text" 
+                                  placeholder="Hoặc nhập lý do khác..." 
+                                  value={cancelReason} 
+                                  onChange={e => setCancelReason(e.target.value)} 
+                                  className="mb-3 w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] p-2 text-xs text-white outline-none focus:border-red-500" 
+                                />
                                 <div className="flex justify-end gap-2">
-                                  <button onClick={() => setCancelDropdown(null)} className="rounded px-3 py-1 text-xs text-zinc-400 hover:text-white">Đóng</button>
-                                  <button onClick={() => updateOrderStatus(order.id, 'cancelled', cancelReason)} className="rounded bg-red-500 px-3 py-1 text-xs text-white hover:bg-red-600">Xác nhận Hủy</button>
+                                  <button 
+                                    onClick={() => setCancelDropdown(null)} 
+                                    className="rounded-lg px-2.5 py-1 text-xs text-zinc-400 hover:text-white"
+                                  >
+                                    Đóng
+                                  </button>
+                                  <button 
+                                    onClick={() => updateOrderStatus(order.id, 'cancelled', cancelReason || 'Admin hủy đơn')} 
+                                    className="rounded-lg bg-red-500 hover:bg-red-600 px-3 py-1 text-xs font-bold text-white shadow-md"
+                                  >
+                                    Xác nhận Hủy
+                                  </button>
                                 </div>
                               </div>
                             )}
                           </div>
                         </div>
+                      ) : (
+                        <span className="text-xs text-zinc-500 italic">Không có thao tác</span>
                       )}
                     </td>
                   </tr>
                 ))}
+
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-zinc-500">Không có đơn hàng nào.</td>
+                    <td colSpan={7} className="p-12 text-center text-zinc-500">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <ShoppingBag className="h-8 w-8 text-zinc-600" />
+                        <p className="text-sm">Không tìm thấy đơn hàng nào phù hợp.</p>
+                      </div>
+                    </td>
                   </tr>
                 )}
               </tbody>

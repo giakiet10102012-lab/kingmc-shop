@@ -24,4 +24,6 @@ export interface ShopSettings {
   bank_id: string;
   bank_account: string;
   bank_owner: string;
+  shop_notice?: string;
+  is_active?: boolean;
 }
