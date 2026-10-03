@@ -31,11 +31,29 @@ export default function Home() {
 
   useEffect(() => {
     async function fetchConfig() {
+      if (typeof window !== 'undefined') {
+        const local = localStorage.getItem('kingmc_settings');
+        if (local) {
+          try {
+            const parsed = JSON.parse(local);
+            setShopSettings(prev => ({ ...prev, ...parsed }));
+          } catch {}
+        }
+      }
+
       try {
         const res = await fetch("/api/config");
         if (res.ok) {
-          const data = await res.json();
-          setShopSettings(prev => ({ ...prev, ...data }));
+          const data = await res.json().catch(() => null);
+          if (data) {
+            setShopSettings(prev => {
+              const merged = { ...prev, ...data };
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('kingmc_settings', JSON.stringify(merged));
+              }
+              return merged;
+            });
+          }
         }
       } catch (err) {
         console.error("Failed to fetch config:", err);

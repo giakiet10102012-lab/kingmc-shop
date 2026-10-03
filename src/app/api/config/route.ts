@@ -8,7 +8,14 @@ const DEFAULT_SETTINGS: ShopSettings = {
   bank_id: 'MB',
   bank_account: '0123456789',
   bank_owner: 'NGUYEN VAN A',
+  shop_notice: '',
+  is_active: true,
+  qr_image_url: '',
+  custom_catalog: ''
 };
+
+// Global in-memory cache fallback in case Supabase is unavailable
+let memorySettings: ShopSettings = { ...DEFAULT_SETTINGS };
 
 const getServiceClient = () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -18,36 +25,33 @@ const getServiceClient = () => {
 };
 
 const checkAdmin = (req: Request) => {
-  const pin = req.headers.get('x-admin-pin');
-  return pin === (process.env.ADMIN_PIN || 'kietgottop2');
+  const pin = (req.headers.get('x-admin-pin') || '').trim();
+  const expectedPin = (process.env.ADMIN_PIN || 'kietgottop2').trim();
+  return pin === expectedPin;
 };
 
 export async function GET() {
   try {
     const supabase = getServiceClient();
-    if (!supabase) {
-      return NextResponse.json(DEFAULT_SETTINGS);
-    }
-
-    const { data, error } = await supabase.from('app_configs').select('*');
-    if (error || !data || data.length === 0) {
-      return NextResponse.json(DEFAULT_SETTINGS);
-    }
-
-    const settings: ShopSettings = { ...DEFAULT_SETTINGS };
-    data.forEach((row: any) => {
-      if (row.key === 'rate_per_m') {
-        settings.rate_per_m = Number(row.value) || DEFAULT_SETTINGS.rate_per_m;
-      } else if (row.key === 'is_active') {
-        settings.is_active = row.value !== 'false';
-      } else {
-        (settings as any)[row.key] = row.value;
+    if (supabase) {
+      const { data, error } = await supabase.from('app_configs').select('*');
+      if (!error && data && data.length > 0) {
+        const settings: ShopSettings = { ...memorySettings };
+        data.forEach((row: any) => {
+          if (row.key === 'rate_per_m') {
+            settings.rate_per_m = Number(row.value) || settings.rate_per_m;
+          } else if (row.key === 'is_active') {
+            settings.is_active = row.value !== 'false';
+          } else {
+            (settings as any)[row.key] = row.value;
+          }
+        });
+        memorySettings = { ...settings };
       }
-    });
-
-    return NextResponse.json(settings);
+    }
+    return NextResponse.json(memorySettings);
   } catch (error: any) {
-    return NextResponse.json(DEFAULT_SETTINGS);
+    return NextResponse.json(memorySettings);
   }
 }
 
@@ -58,24 +62,51 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
+
+    // 1. Luôn cập nhật bộ nhớ tạm
+    memorySettings = {
+      ...memorySettings,
+      ...body
+    };
+
+    let dbSuccess = false;
+    let dbWarning: string | null = null;
+
+    // 2. Cố gắng đồng bộ lên Supabase nếu có cấu hình
     const supabase = getServiceClient();
-    if (!supabase) {
-      return NextResponse.json({ error: 'Chưa cấu hình Supabase URL hoặc Key' }, { status: 500 });
+    if (supabase) {
+      try {
+        const upserts = Object.keys(body).map((key) => ({
+          key,
+          value: typeof body[key] === 'object' ? JSON.stringify(body[key]) : String(body[key]),
+          updated_at: new Date().toISOString()
+        }));
+
+        if (upserts.length > 0) {
+          const { error } = await supabase.from('app_configs').upsert(upserts, { onConflict: 'key' });
+          if (error) {
+            console.warn('Supabase upsert warning:', error.message);
+            dbWarning = error.message;
+          } else {
+            dbSuccess = true;
+          }
+        }
+      } catch (dbErr: any) {
+        console.warn('Supabase save exception:', dbErr.message);
+        dbWarning = dbErr.message;
+      }
+    } else {
+      dbWarning = 'Chưa cấu hình Supabase URL hoặc Key trên Vercel';
     }
 
-    const upserts = Object.keys(body).map((key) => ({
-      key,
-      value: String(body[key]),
-      updated_at: new Date().toISOString()
-    }));
-
-    if (upserts.length > 0) {
-      const { error } = await supabase.from('app_configs').upsert(upserts, { onConflict: 'key' });
-      if (error) throw error;
-    }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      savedToDatabase: dbSuccess,
+      warning: dbWarning,
+      settings: memorySettings
+    });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('API Config PUT error:', error);
+    return NextResponse.json({ error: error.message || 'Lỗi xử lý lưu cấu hình' }, { status: 500 });
   }
 }

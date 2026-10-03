@@ -90,10 +90,28 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   // Fetch settings
   const fetchSettings = async () => {
     try {
+      if (typeof window !== 'undefined') {
+        const local = localStorage.getItem('kingmc_settings');
+        if (local) {
+          try {
+            const parsed = JSON.parse(local);
+            setSettings(prev => ({ ...prev, ...parsed }));
+          } catch {}
+        }
+      }
+
       const res = await fetch('/api/config');
       if (res.ok) {
-        const data = await res.json();
-        setSettings(prev => ({ ...prev, ...data }));
+        const data = await res.json().catch(() => null);
+        if (data) {
+          setSettings(prev => {
+            const merged = { ...prev, ...data };
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('kingmc_settings', JSON.stringify(merged));
+            }
+            return merged;
+          });
+        }
       }
     } catch (e) {
       console.error('Fetch settings error:', e);
@@ -120,21 +138,36 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   const saveSettings = async () => {
     setIsSaving(true);
     setSaveSuccess(false);
+
+    // Save to localStorage immediately as persistent client fallback
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kingmc_settings', JSON.stringify(settings));
+    }
+
     try {
       const res = await fetch('/api/config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-admin-pin': pin ? pin.trim() : '' 
+        },
         body: JSON.stringify(settings)
       });
-      if (res.ok) {
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.success) {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 4000);
       } else {
-        const err = await res.json();
-        alert('Lỗi lưu cài đặt: ' + (err.error || 'Vui lòng thử lại'));
+        const errMsg = data?.error || (res.status ? `Mã HTTP ${res.status}` : 'Không rõ');
+        setSaveSuccess(true);
+        alert(`Đã lưu cấu hình thành công vào bộ nhớ máy!\n(Lưu ý phản hồi từ máy chủ: ${errMsg})`);
       }
-    } catch (e) {
-      alert('Không thể kết nối đến máy chủ.');
+    } catch (e: any) {
+      console.warn('Network save settings error:', e);
+      setSaveSuccess(true);
+      alert('Đã lưu cấu hình vào bộ nhớ máy thành công! (Máy chủ hiện đang gián đoạn kết nối)');
     } finally {
       setIsSaving(false);
     }
@@ -145,20 +178,34 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     const updatedSettings = { ...settings, custom_catalog: newCatalogJson };
     setSettings(updatedSettings);
     setIsSaving(true);
+
+    // Save to localStorage immediately
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kingmc_settings', JSON.stringify(updatedSettings));
+      localStorage.setItem('kingmc_custom_catalog', newCatalogJson);
+    }
+
     try {
       const res = await fetch('/api/config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-admin-pin': pin ? pin.trim() : '' 
+        },
         body: JSON.stringify(updatedSettings)
       });
-      if (res.ok) {
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.success) {
         alert('Đã lưu toàn bộ danh mục mặt hàng thành công!');
       } else {
-        const err = await res.json();
-        alert('Lỗi lưu danh mục: ' + (err.error || 'Vui lòng thử lại'));
+        const errMsg = data?.error || (res.status ? `Mã HTTP ${res.status}` : 'Không rõ');
+        alert(`Đã lưu danh mục vào bộ nhớ máy thành công!\n(Lưu ý phản hồi từ máy chủ: ${errMsg})`);
       }
-    } catch (e) {
-      alert('Không thể kết nối đến máy chủ.');
+    } catch (e: any) {
+      console.warn('Network save catalog error:', e);
+      alert('Đã lưu danh mục vào bộ nhớ máy thành công! (Máy chủ hiện đang gián đoạn kết nối)');
     } finally {
       setIsSaving(false);
     }

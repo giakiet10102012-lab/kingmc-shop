@@ -23,14 +23,21 @@ ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app_configs ENABLE ROW LEVEL SECURITY;
 
 -- RLS policies cho orders
--- Cho phép bất kỳ ai cũng có thể thêm đơn hàng
+DROP POLICY IF EXISTS "Cho phép thêm đơn hàng" ON orders;
 CREATE POLICY "Cho phép thêm đơn hàng" ON orders FOR INSERT WITH CHECK (true);
--- Cho phép xem đơn hàng (đã đơn giản hóa để public xem)
+
+DROP POLICY IF EXISTS "Cho phép xem đơn hàng" ON orders;
 CREATE POLICY "Cho phép xem đơn hàng" ON orders FOR SELECT USING (true);
 
--- RLS policies cho app_configs
--- Cho phép public đọc cấu hình
+DROP POLICY IF EXISTS "Cho phép cập nhật đơn hàng" ON orders;
+CREATE POLICY "Cho phép cập nhật đơn hàng" ON orders FOR UPDATE USING (true) WITH CHECK (true);
+
+-- RLS policies cho app_configs (Cho phép đọc và chỉnh sửa cấu hình)
+DROP POLICY IF EXISTS "Cho phép xem cấu hình" ON app_configs;
 CREATE POLICY "Cho phép xem cấu hình" ON app_configs FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Cho phép toàn quyền cấu hình" ON app_configs;
+CREATE POLICY "Cho phép toàn quyền cấu hình" ON app_configs FOR ALL USING (true) WITH CHECK (true);
 
 -- Thêm cấu hình mặc định (Tỷ giá, thông tin ngân hàng)
 INSERT INTO app_configs (key, value) VALUES 

@@ -10,8 +10,9 @@ const getServiceClient = () => {
 };
 
 const checkAdmin = (req: Request) => {
-  const pin = req.headers.get('x-admin-pin');
-  return pin === (process.env.ADMIN_PIN || 'kietgottop2');
+  const pin = (req.headers.get('x-admin-pin') || '').trim();
+  const expectedPin = (process.env.ADMIN_PIN || 'kietgottop2').trim();
+  return pin === expectedPin;
 };
 
 export async function POST(req: Request) {
