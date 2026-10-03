@@ -146,7 +146,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
 
     try {
       const res = await fetch('/api/config', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
           'x-admin-pin': pin ? pin.trim() : '' 
@@ -159,6 +159,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
       if (res.ok && data?.success) {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 4000);
+        alert('Đã lưu cấu hình shop & ngân hàng thành công!');
       } else {
         const errMsg = data?.error || (res.status ? `Mã HTTP ${res.status}` : 'Không rõ');
         setSaveSuccess(true);
@@ -187,7 +188,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
 
     try {
       const res = await fetch('/api/config', {
-        method: 'PUT',
+        method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
           'x-admin-pin': pin ? pin.trim() : '' 

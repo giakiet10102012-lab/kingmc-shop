@@ -30,7 +30,10 @@ const checkAdmin = (req: Request) => {
   return pin === expectedPin;
 };
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export async function GET(req: Request) {
   try {
     const supabase = getServiceClient();
     if (supabase) {
@@ -55,7 +58,7 @@ export async function GET() {
   }
 }
 
-export async function PUT(req: Request) {
+async function handleSaveConfig(req: Request) {
   try {
     if (!checkAdmin(req)) {
       return NextResponse.json({ error: 'Mã PIN Admin không đúng' }, { status: 401 });
@@ -106,7 +109,15 @@ export async function PUT(req: Request) {
       settings: memorySettings
     });
   } catch (error: any) {
-    console.error('API Config PUT error:', error);
+    console.error('API Config save error:', error);
     return NextResponse.json({ error: error.message || 'Lỗi xử lý lưu cấu hình' }, { status: 500 });
   }
+}
+
+export async function POST(req: Request) {
+  return handleSaveConfig(req);
+}
+
+export async function PUT(req: Request) {
+  return handleSaveConfig(req);
 }
