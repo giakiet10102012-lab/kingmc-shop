@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gaming-dark text-white antialiased selection:bg-gaming-accent/30 selection:text-gaming-accent;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e1e2e;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #10b981;
+}
+
+@layer utilities {
+  .glow-green {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+  }
+  .glow-gold {
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+  }
+}
+
+/* Input transitions */
+input, textarea {
+  transition: all 0.2s ease-in-out;
+}
+input:focus, textarea:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
