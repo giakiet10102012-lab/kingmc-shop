@@ -22,11 +22,15 @@ export default function ServiceCatalog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Use custom packages from settings if defined by admin, else fallback to class default
+  // Use custom packages from settings or localStorage if defined, else fallback to class default
   let packages: ServicePackage[] = service.getPackages();
-  if (settings.custom_catalog) {
+  let customCatalogStr = settings.custom_catalog;
+  if (!customCatalogStr && typeof window !== 'undefined') {
+    customCatalogStr = localStorage.getItem('kingmc_custom_catalog') || '';
+  }
+  if (customCatalogStr) {
     try {
-      const allCustom: CustomPackageItem[] = JSON.parse(settings.custom_catalog);
+      const allCustom: CustomPackageItem[] = JSON.parse(customCatalogStr);
       const serviceCustom = allCustom.filter((item) => item.serviceId === service.id);
       if (serviceCustom.length > 0) {
         packages = serviceCustom;

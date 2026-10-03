@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Package, 
   Plus, 
@@ -44,9 +44,9 @@ export default function AdminCatalogManager({
   onSaveCatalog,
   isSaving,
 }: AdminCatalogManagerProps) {
-  // Initialize items from catalogJson or fallback to default
+  // Initialize items from catalogJson or fallback to localStorage / default
   const [items, setItems] = useState<CustomPackageItem[]>(() => {
-    if (catalogJson) {
+    if (catalogJson && catalogJson.trim().length > 2) {
       try {
         const parsed = JSON.parse(catalogJson);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -54,8 +54,46 @@ export default function AdminCatalogManager({
         console.error(e);
       }
     }
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem('kingmc_custom_catalog');
+      if (local && local.trim().length > 2) {
+        try {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+    }
     return getDefaultCatalog();
   });
+
+  // Keep items synced when catalogJson prop arrives from server
+  useEffect(() => {
+    if (catalogJson && catalogJson.trim().length > 2) {
+      try {
+        const parsed = JSON.parse(catalogJson);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setItems(parsed);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('kingmc_custom_catalog', catalogJson);
+          }
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to parse catalogJson prop:', e);
+      }
+    }
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem('kingmc_custom_catalog');
+      if (local && local.trim().length > 2) {
+        try {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setItems(parsed);
+          }
+        } catch (e) {}
+      }
+    }
+  }, [catalogJson]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [editingItem, setEditingItem] = useState<CustomPackageItem | null>(null);
@@ -110,6 +148,9 @@ export default function AdminCatalogManager({
       const updated = items.filter(i => i.id !== id);
       setItems(updated);
       setHasUnsavedChanges(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('kingmc_custom_catalog', JSON.stringify(updated));
+      }
     }
   };
 
@@ -118,6 +159,9 @@ export default function AdminCatalogManager({
       const defaults = getDefaultCatalog();
       setItems(defaults);
       setHasUnsavedChanges(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('kingmc_custom_catalog', JSON.stringify(defaults));
+      }
     }
   };
 
@@ -130,9 +174,11 @@ export default function AdminCatalogManager({
       .map(line => line.trim())
       .filter(Boolean);
 
+    let updatedList: CustomPackageItem[] = [];
+
     if (editingItem) {
       // Update existing item
-      const updated = items.map(it => {
+      updatedList = items.map(it => {
         if (it.id === editingItem.id) {
           return {
             ...it,
@@ -149,7 +195,6 @@ export default function AdminCatalogManager({
         }
         return it;
       });
-      setItems(updated);
     } else {
       // Add new item
       const newItem: CustomPackageItem = {
@@ -164,15 +209,23 @@ export default function AdminCatalogManager({
         description: formDescription.trim(),
         features: featuresArray,
       };
-      setItems([...items, newItem]);
+      updatedList = [...items, newItem];
     }
 
+    setItems(updatedList);
     setHasUnsavedChanges(true);
     setIsModalOpen(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kingmc_custom_catalog', JSON.stringify(updatedList));
+    }
   };
 
   const handleSaveToDatabase = async () => {
-    await onSaveCatalog(JSON.stringify(items));
+    const jsonStr = JSON.stringify(items);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kingmc_custom_catalog', jsonStr);
+    }
+    await onSaveCatalog(jsonStr);
     setHasUnsavedChanges(false);
   };
 

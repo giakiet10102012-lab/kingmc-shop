@@ -90,13 +90,20 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   // Fetch settings
   const fetchSettings = async () => {
     try {
+      let localCatalog = '';
       if (typeof window !== 'undefined') {
+        localCatalog = localStorage.getItem('kingmc_custom_catalog') || '';
         const local = localStorage.getItem('kingmc_settings');
         if (local) {
           try {
             const parsed = JSON.parse(local);
+            if (!parsed.custom_catalog && localCatalog) {
+              parsed.custom_catalog = localCatalog;
+            }
             setSettings(prev => ({ ...prev, ...parsed }));
           } catch {}
+        } else if (localCatalog) {
+          setSettings(prev => ({ ...prev, custom_catalog: localCatalog }));
         }
       }
 
@@ -105,9 +112,19 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
         const data = await res.json().catch(() => null);
         if (data) {
           setSettings(prev => {
-            const merged = { ...prev, ...data };
+            let catalogToUse = prev.custom_catalog;
+            if (data.custom_catalog && data.custom_catalog.trim().length > 2) {
+              catalogToUse = data.custom_catalog;
+            } else if (localCatalog && localCatalog.trim().length > 2) {
+              catalogToUse = localCatalog;
+            }
+
+            const merged = { ...prev, ...data, custom_catalog: catalogToUse };
             if (typeof window !== 'undefined') {
               localStorage.setItem('kingmc_settings', JSON.stringify(merged));
+              if (catalogToUse) {
+                localStorage.setItem('kingmc_custom_catalog', catalogToUse);
+              }
             }
             return merged;
           });

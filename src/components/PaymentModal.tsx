@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { QrCode, Building2, Copy, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { QrCode, Building2, Copy, CheckCircle2, AlertTriangle, X, Camera } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
 
@@ -158,11 +158,29 @@ export default function PaymentModal({ order, settings, onClose }: PaymentModalP
             </div>
           </div>
 
-          <div className="border-2 border-red-500 bg-red-500/10 p-4 rounded-xl flex items-start gap-3">
-            <AlertTriangle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-lg font-bold text-red-400 leading-tight">
-              ⚠️ CHÚ Ý QUAN TRỌNG: Nội dung chuyển khoản BẮT BUỘC phải là: <span className="bg-red-500/20 px-2 py-0.5 rounded text-red-300">{order.id} {order.ign}</span>. Nếu điền sai hoặc thiếu, Admin sẽ không thể xác nhận đơn và xử lý cho bạn!
-            </p>
+          <div className="space-y-3">
+            {/* Warning: Correct transfer syntax */}
+            <div className="border-2 border-red-500/80 bg-red-500/10 p-4 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs sm:text-sm font-bold text-red-400 leading-snug">
+                ⚠️ CHÚ Ý QUAN TRỌNG: Nội dung chuyển khoản BẮT BUỘC phải là: <span className="bg-red-500/20 px-2 py-0.5 rounded text-red-300 font-mono">{order.id} {order.ign}</span>. Nếu điền sai hoặc thiếu, Admin sẽ không thể xác nhận đơn và xử lý cho bạn!
+              </p>
+            </div>
+
+            {/* Crucial requirement: Screenshot / proof of payment */}
+            <div className="border-2 border-amber-500/80 bg-gradient-to-r from-amber-500/15 via-[#1a1820] to-[#12121a] p-4 rounded-xl flex items-start gap-3.5 shadow-[0_0_20px_rgba(245,158,11,0.15)]">
+              <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                <Camera className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 text-xs sm:text-sm">
+                <p className="font-extrabold uppercase text-amber-400 tracking-wide">
+                  📸 BẮT BUỘC PHẢI CÓ ẢNH CHỤP THANH TOÁN ĐỂ ĐƯỢC HỖ TRỢ:
+                </p>
+                <p className="text-zinc-300 leading-relaxed">
+                  Sau khi chuyển tiền, <strong>quý khách vui lòng CHỤP LẠI MÀN HÌNH giao dịch chuyển khoản thành công</strong> để làm bằng chứng. Nếu gặp lỗi, delay hoặc có bất kỳ sự cố gì xảy ra, <strong>bắt buộc phải gửi ảnh chụp thanh toán</strong> thì Admin mới có thể đối soát và hỗ trợ giải quyết cho bạn!
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
