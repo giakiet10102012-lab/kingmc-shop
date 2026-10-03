@@ -16,8 +16,10 @@ export default function AdminPage() {
       const storedPin = localStorage.getItem('admin_pin');
       if (storedPin) {
         try {
-          const res = await fetch('/api/orders?status=all', {
-            headers: { 'x-admin-pin': storedPin }
+          const res = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin: storedPin })
           });
           if (res.ok) {
             setAdminPin(storedPin);
