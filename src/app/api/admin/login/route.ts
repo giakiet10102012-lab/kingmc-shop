@@ -3,14 +3,14 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   try {
     const { pin } = await req.json();
-    const correctPin = process.env.ADMIN_PIN || '123456';
+    const correctPin = process.env.ADMIN_PIN || 'kietgottop2';
 
     if (!pin) {
-      return NextResponse.json({ error: 'Vui lòng nhập mã PIN quản trị' }, { status: 400 });
+      return NextResponse.json({ error: 'Vui lòng nhập mật khẩu quản trị' }, { status: 400 });
     }
 
     if (String(pin).trim() !== correctPin.trim()) {
-      return NextResponse.json({ error: 'Mã PIN không chính xác. Mặc định là 123456' }, { status: 401 });
+      return NextResponse.json({ error: 'Mật khẩu quản trị không chính xác' }, { status: 401 });
     }
 
     return NextResponse.json({ 

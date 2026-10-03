@@ -47,7 +47,10 @@ export default function PaymentModal({ order, settings, onClose }: PaymentModalP
   };
 
   const transferContent = `${order.id} ${order.ign}`;
-  const qrUrl = `https://img.vietqr.io/image/${settings.bank_id}-${settings.bank_account}-compact2.png?amount=${order.total_vnd}&addInfo=${encodeURIComponent(transferContent)}&accountName=${encodeURIComponent(settings.bank_owner)}`;
+  const defaultVietQr = `https://img.vietqr.io/image/${settings.bank_id}-${settings.bank_account}-compact2.png?amount=${order.total_vnd}&addInfo=${encodeURIComponent(transferContent)}&accountName=${encodeURIComponent(settings.bank_owner)}`;
+  const qrUrl = settings.qr_image_url && settings.qr_image_url.trim().length > 0 
+    ? settings.qr_image_url.trim() 
+    : defaultVietQr;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">

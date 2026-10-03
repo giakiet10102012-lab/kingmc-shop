@@ -18,6 +18,19 @@ export interface AppConfig {
   updated_at: string;
 }
 
+export interface CustomPackageItem {
+  id: string;
+  serviceId: string; // 'money' | 'rank' | 'items' | 'boosting' | 'topup'
+  name: string;
+  price: number;
+  originalPrice?: number;
+  badge?: string;
+  description: string;
+  features: string[];
+  unit?: string;
+  popular?: boolean;
+}
+
 export interface ShopSettings {
   rate_per_m: number;
   bank_name: string;
@@ -26,4 +39,6 @@ export interface ShopSettings {
   bank_owner: string;
   shop_notice?: string;
   is_active?: boolean;
+  qr_image_url?: string; // Link ảnh QR tùy chỉnh của shop
+  custom_catalog?: string; // JSON string chứa danh mục các gói bán do admin tùy chỉnh
 }

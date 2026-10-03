@@ -61,14 +61,14 @@ export default function AdminLogin({ onLogin }: AdminLoginProps) {
                 type="password"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
-                placeholder="Nhập mã PIN bí mật (Mặc định: 123456)"
+                placeholder="Nhập mật khẩu quản trị (Mặc định: kietgottop2)"
                 className="block w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] py-3 pl-11 pr-4 text-zinc-100 placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
                 required
                 autoFocus
               />
             </div>
             {error && <p className="mt-2 text-sm text-red-500 font-medium">{error}</p>}
-            <p className="mt-2 text-xs text-zinc-500">Mã PIN mặc định: <code>123456</code> (cấu hình biến <code>ADMIN_PIN</code>)</p>
+            <p className="mt-2 text-xs text-zinc-500">Mật khẩu mặc định: <code>kietgottop2</code> (hoặc cấu hình biến <code>ADMIN_PIN</code>)</p>
           </div>
 
           <button

@@ -5,6 +5,7 @@ import { ItemService } from './ItemService';
 import { BoostingService } from './BoostingService';
 import { TopupService } from './TopupService';
 import { ServiceId } from './types';
+import { CustomPackageItem } from '@/lib/types';
 
 export class ServiceRegistry {
   private services: Map<ServiceId, BaseKingService> = new Map();
@@ -31,6 +32,20 @@ export class ServiceRegistry {
 }
 
 export const serviceRegistry = new ServiceRegistry();
+
+export function getDefaultCatalog(): CustomPackageItem[] {
+  const allServices = serviceRegistry.getAll();
+  const list: CustomPackageItem[] = [];
+  allServices.forEach(srv => {
+    srv.getPackages().forEach(pkg => {
+      list.push({
+        ...pkg,
+        serviceId: srv.id
+      });
+    });
+  });
+  return list;
+}
 
 export * from './types';
 export * from './BaseKingService';

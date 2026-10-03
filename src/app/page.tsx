@@ -1,16 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import Header from "@/components/Header";
 import OrderForm from "@/components/OrderForm";
 import PaymentModal from "@/components/PaymentModal";
-import AuthModal from "@/components/AuthModal";
-import OrderHistoryModal from "@/components/OrderHistoryModal";
 import ServiceSelector from "@/components/ServiceSelector";
 import ServiceCatalog from "@/components/ServiceCatalog";
-import { serviceRegistry, ServiceId, BaseKingService } from "@/services";
-import { getCurrentUser, logoutUser, UserProfile } from "@/lib/auth";
+import { serviceRegistry, ServiceId } from "@/services";
 import type { ShopSettings, Order } from "@/lib/types";
 import { formatVND } from "@/lib/utils";
 import { Zap, ShieldCheck, Clock, CheckCircle2, BellRing, AlertCircle } from "lucide-react";
@@ -28,21 +24,12 @@ export default function Home() {
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // User auth state
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
-
   // Active KingMC Service class
   const [activeServiceId, setActiveServiceId] = useState<ServiceId>('money');
   const allServices = serviceRegistry.getAll();
   const currentService = serviceRegistry.getById(activeServiceId) || allServices[0];
 
   useEffect(() => {
-    // Check logged in user on client load
-    setCurrentUser(getCurrentUser());
-
     async function fetchConfig() {
       try {
         const res = await fetch("/api/config");
@@ -59,25 +46,9 @@ export default function Home() {
     fetchConfig();
   }, []);
 
-  const handleOpenAuth = (mode: 'login' | 'register') => {
-    setAuthMode(mode);
-    setAuthModalOpen(true);
-  };
-
-  const handleLogout = () => {
-    logoutUser();
-    setCurrentUser(null);
-  };
-
   return (
     <>
-      <Header 
-        rate={shopSettings.rate_per_m} 
-        user={currentUser}
-        onOpenAuth={handleOpenAuth}
-        onOpenHistory={() => setHistoryModalOpen(true)}
-        onLogout={handleLogout}
-      />
+      <Header rate={shopSettings.rate_per_m} />
 
       <main className="flex-1 relative flex flex-col items-center justify-center py-8 md:py-12 px-4">
         {/* Animated Background Gradients */}
@@ -170,7 +141,6 @@ export default function Home() {
               {/* Money Order Form Component */}
               <OrderForm 
                 settings={shopSettings} 
-                user={currentUser}
                 onOrderCreated={(order) => setCreatedOrder(order)} 
               />
             </>
@@ -179,49 +149,24 @@ export default function Home() {
             <ServiceCatalog
               service={currentService}
               settings={shopSettings}
-              user={currentUser}
               onOrderCreated={(order) => setCreatedOrder(order)}
-              onOpenAuth={() => handleOpenAuth('login')}
             />
           )}
 
         </div>
       </main>
 
-      {/* Footer */}
+      {/* Footer (No admin links, purely public footer) */}
       <footer className="w-full border-t border-[#1e1e2e] bg-[#0a0a0f] py-6 relative z-10">
         <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-zinc-400">© KingMC Shop</span>
-            <span className="text-zinc-600">•</span>
-            <Link href="/admin" className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors">
-              Trang Quản Trị (/admin)
-            </Link>
           </div>
           <p className="text-xs text-zinc-600 max-w-md text-center md:text-right">
             Hệ sinh thái dịch vụ Minecraft server KingMC. Giao dịch an toàn, tiện lợi & tự động.
           </p>
         </div>
       </footer>
-
-      {/* Auth Modal for Customer Login / Register */}
-      <AuthModal
-        isOpen={authModalOpen}
-        defaultMode={authMode}
-        onClose={() => setAuthModalOpen(false)}
-        onSuccess={(usr) => setCurrentUser(usr)}
-      />
-
-      {/* Order History Modal for Customer */}
-      {currentUser && (
-        <OrderHistoryModal
-          isOpen={historyModalOpen}
-          user={currentUser}
-          settings={shopSettings}
-          onClose={() => setHistoryModalOpen(false)}
-          onSelectOrderToPay={(order) => setCreatedOrder(order)}
-        />
-      )}
 
       {/* Payment Modal */}
       {createdOrder && (

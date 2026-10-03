@@ -1,30 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ShoppingCart, Gamepad2, Coins, AlertTriangle, Loader2, Sparkles, Check } from "lucide-react";
 import { formatVND, formatNumber } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
-import { UserProfile } from "@/lib/auth";
 
 interface OrderFormProps {
   settings: ShopSettings;
-  user?: UserProfile | null;
   onOrderCreated: (order: Order) => void;
 }
 
 const PRESET_AMOUNTS = [5, 10, 20, 50, 100];
 
-export default function OrderForm({ settings, user, onOrderCreated }: OrderFormProps) {
-  const [ign, setIgn] = useState(user?.username || "");
+export default function OrderForm({ settings, onOrderCreated }: OrderFormProps) {
+  const [ign, setIgn] = useState("");
   const [moneyM, setMoneyM] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (user?.username) {
-      setIgn(user.username);
-    }
-  }, [user?.username]);
 
   const parsedMoney = typeof moneyM === "number" ? moneyM : 0;
   const currentRate = settings.rate_per_m || 10000;
@@ -47,7 +39,6 @@ export default function OrderForm({ settings, user, onOrderCreated }: OrderFormP
           ign: ign.trim(), 
           money_m: parsedMoney, 
           total_vnd: totalVND,
-          user_id: user?.id || null 
         }),
       });
 

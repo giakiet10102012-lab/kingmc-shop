@@ -1,37 +1,44 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Check, Sparkles, ArrowRight, ShieldCheck, ShoppingCart, User, AlertCircle } from 'lucide-react';
+import { Check, Sparkles, ArrowRight, ShoppingCart, User, AlertCircle } from 'lucide-react';
 import { BaseKingService, ServicePackage } from '@/services';
 import { formatVND, cn } from '@/lib/utils';
-import { Order, ShopSettings } from '@/lib/types';
-import { UserProfile } from '@/lib/auth';
+import { Order, ShopSettings, CustomPackageItem } from '@/lib/types';
 
 interface ServiceCatalogProps {
   service: BaseKingService;
   settings: ShopSettings;
-  user: UserProfile | null;
   onOrderCreated: (order: Order) => void;
-  onOpenAuth: () => void;
 }
 
 export default function ServiceCatalog({
   service,
   settings,
-  user,
   onOrderCreated,
-  onOpenAuth,
 }: ServiceCatalogProps) {
   const [selectedPackage, setSelectedPackage] = useState<ServicePackage | null>(null);
-  const [ign, setIgn] = useState(user?.username || '');
+  const [ign, setIgn] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const packages = service.getPackages();
+  // Use custom packages from settings if defined by admin, else fallback to class default
+  let packages: ServicePackage[] = service.getPackages();
+  if (settings.custom_catalog) {
+    try {
+      const allCustom: CustomPackageItem[] = JSON.parse(settings.custom_catalog);
+      const serviceCustom = allCustom.filter((item) => item.serviceId === service.id);
+      if (serviceCustom.length > 0) {
+        packages = serviceCustom;
+      }
+    } catch (e) {
+      console.error('Failed to parse custom_catalog', e);
+    }
+  }
 
   const handleOpenOrder = (pkg: ServicePackage) => {
     setSelectedPackage(pkg);
-    setIgn(user?.username || '');
+    setIgn('');
     setError(null);
   };
 
@@ -39,7 +46,7 @@ export default function ServiceCatalog({
     e.preventDefault();
     if (!selectedPackage) return;
     if (!ign.trim()) {
-      setError('Vui lòng nhập tên Minecraft (IGN) của bạn!');
+      setError('Vui lòng nhập tên nhân vật Minecraft (IGN) của bạn!');
       return;
     }
 
@@ -47,8 +54,6 @@ export default function ServiceCatalog({
     setError(null);
 
     try {
-      // Create order via /api/orders
-      // Format money_m as 1 or equivalent, total_vnd as pkg.price
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,7 +61,6 @@ export default function ServiceCatalog({
           ign: `${ign.trim()} [${selectedPackage.name}]`,
           money_m: 1,
           total_vnd: selectedPackage.price,
-          user_id: user?.id || null
         })
       });
 
@@ -208,7 +212,7 @@ export default function ServiceCatalog({
             <form onSubmit={handleConfirmOrder} className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-zinc-300">
-                  Tên nhân vật Minecraft (IGN)
+                  Tên nhân vật Minecraft (IGN) của bạn
                 </label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
@@ -219,12 +223,13 @@ export default function ServiceCatalog({
                     required
                     value={ign}
                     onChange={(e) => setIgn(e.target.value)}
-                    placeholder="Nhập nick Minecraft cần nhận dịch vụ"
+                    placeholder="Nhập nick Minecraft nhận dịch vụ"
                     className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] py-2.5 pl-10 pr-4 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    autoFocus
                   />
                 </div>
                 <p className="mt-1 text-[11px] text-zinc-500">
-                  Nhập chính xác tên tài khoản trong game để Admin cấp dịch vụ.
+                  Nhập chính xác tên nhân vật trong game để shop giao dịch.
                 </p>
               </div>
 
