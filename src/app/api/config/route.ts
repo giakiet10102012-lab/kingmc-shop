@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { ShopSettings } from '@/lib/types';
-import { getDefaultCatalog } from '@/services';
 
 const DEFAULT_SETTINGS: ShopSettings = {
   rate_per_m: 10000,
@@ -11,8 +10,7 @@ const DEFAULT_SETTINGS: ShopSettings = {
   bank_owner: 'NGUYEN VAN A',
   shop_notice: '',
   is_active: true,
-  qr_image_url: '',
-  custom_catalog: JSON.stringify(getDefaultCatalog())
+  qr_image_url: ''
 };
 
 // Global in-memory cache fallback in case Supabase is unavailable
@@ -46,10 +44,6 @@ export async function GET(req: Request) {
             settings.rate_per_m = Number(row.value) || settings.rate_per_m;
           } else if (row.key === 'is_active') {
             settings.is_active = row.value !== 'false';
-          } else if (row.key === 'custom_catalog') {
-            if (row.value && row.value.trim().length > 2) {
-              settings.custom_catalog = row.value;
-            }
           } else {
             (settings as any)[row.key] = row.value;
           }

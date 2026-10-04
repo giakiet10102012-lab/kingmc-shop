@@ -20,13 +20,11 @@ import {
   QrCode, 
   Save, 
   Radio,
-  Package,
   ImageIcon
 } from 'lucide-react';
 import { Order, ShopSettings } from '@/lib/types';
 import { cn, formatNumber, formatVND, getStatusColor, getStatusLabel } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import AdminCatalogManager from './AdminCatalogManager';
 
 interface AdminDashboardProps {
   pin: string;
@@ -57,11 +55,10 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     bank_owner: 'NGUYEN VAN A',
     shop_notice: '',
     is_active: true,
-    qr_image_url: '',
-    custom_catalog: ''
+    qr_image_url: ''
   });
 
-  const [activeMainSection, setActiveMainSection] = useState<'orders' | 'catalog' | 'settings'>('orders');
+  const [activeMainSection, setActiveMainSection] = useState<'orders' | 'settings'>('orders');
   const [activeTab, setActiveTab] = useState<'all' | 'paid_waiting' | 'pending' | 'completed' | 'cancelled'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cancelDropdown, setCancelDropdown] = useState<string | null>(null);
@@ -90,20 +87,13 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   // Fetch settings
   const fetchSettings = async () => {
     try {
-      let localCatalog = '';
       if (typeof window !== 'undefined') {
-        localCatalog = localStorage.getItem('kingmc_custom_catalog') || '';
         const local = localStorage.getItem('kingmc_settings');
         if (local) {
           try {
             const parsed = JSON.parse(local);
-            if (!parsed.custom_catalog && localCatalog) {
-              parsed.custom_catalog = localCatalog;
-            }
             setSettings(prev => ({ ...prev, ...parsed }));
           } catch {}
-        } else if (localCatalog) {
-          setSettings(prev => ({ ...prev, custom_catalog: localCatalog }));
         }
       }
 
@@ -112,19 +102,9 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
         const data = await res.json().catch(() => null);
         if (data) {
           setSettings(prev => {
-            let catalogToUse = prev.custom_catalog;
-            if (data.custom_catalog && data.custom_catalog.trim().length > 2) {
-              catalogToUse = data.custom_catalog;
-            } else if (localCatalog && localCatalog.trim().length > 2) {
-              catalogToUse = localCatalog;
-            }
-
-            const merged = { ...prev, ...data, custom_catalog: catalogToUse };
+            const merged = { ...prev, ...data };
             if (typeof window !== 'undefined') {
               localStorage.setItem('kingmc_settings', JSON.stringify(merged));
-              if (catalogToUse) {
-                localStorage.setItem('kingmc_custom_catalog', catalogToUse);
-              }
             }
             return merged;
           });
@@ -191,43 +171,6 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     }
   };
 
-  // Save Catalog
-  const handleSaveCatalog = async (newCatalogJson: string) => {
-    const updatedSettings = { ...settings, custom_catalog: newCatalogJson };
-    setSettings(updatedSettings);
-    setIsSaving(true);
-
-    // Save to localStorage immediately
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('kingmc_settings', JSON.stringify(updatedSettings));
-      localStorage.setItem('kingmc_custom_catalog', newCatalogJson);
-    }
-
-    try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'x-admin-pin': pin ? pin.trim() : '' 
-        },
-        body: JSON.stringify(updatedSettings)
-      });
-
-      const data = await res.json().catch(() => null);
-
-      if (res.ok && data?.success) {
-        alert('Đã lưu toàn bộ danh mục mặt hàng thành công!');
-      } else {
-        const errMsg = data?.error || (res.status ? `Mã HTTP ${res.status}` : 'Không rõ');
-        alert(`Đã lưu danh mục vào bộ nhớ máy thành công!\n(Lưu ý phản hồi từ máy chủ: ${errMsg})`);
-      }
-    } catch (e: any) {
-      console.warn('Network save catalog error:', e);
-      alert('Đã lưu danh mục vào bộ nhớ máy thành công! (Máy chủ hiện đang gián đoạn kết nối)');
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   // Update order status
   const updateOrderStatus = async (id: string, status: string, reason?: string) => {
@@ -341,8 +284,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
           </button>
         </div>
 
-        {/* 3 TOP-LEVEL WORKSPACE TABS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-1.5 rounded-2xl bg-[#12121a] border border-[#1e1e2e]">
+        {/* 2 TOP-LEVEL WORKSPACE TABS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-1.5 rounded-2xl bg-[#12121a] border border-[#1e1e2e]">
           <button
             onClick={() => setActiveMainSection('orders')}
             className={cn(
@@ -365,25 +308,6 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
           </button>
 
           <button
-            onClick={() => setActiveMainSection('catalog')}
-            className={cn(
-              "flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-bold transition-all",
-              activeMainSection === 'catalog'
-                ? "bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.3)]"
-                : "text-zinc-400 hover:text-white hover:bg-[#1a1a28]"
-            )}
-          >
-            <Package size={18} />
-            <span>Quản Lý Mặt Hàng & Dịch Vụ</span>
-            <span className={cn(
-              "px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-extrabold",
-              activeMainSection === 'catalog' ? "bg-black/20 text-black" : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-            )}>
-              Thêm / Sửa / Xóa
-            </span>
-          </button>
-
-          <button
             onClick={() => setActiveMainSection('settings')}
             className={cn(
               "flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-bold transition-all",
@@ -397,16 +321,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
           </button>
         </div>
 
-        {/* SECTION 1: CATALOG MANAGEMENT */}
-        {activeMainSection === 'catalog' && (
-          <AdminCatalogManager
-            catalogJson={settings.custom_catalog}
-            onSaveCatalog={handleSaveCatalog}
-            isSaving={isSaving}
-          />
-        )}
-
-        {/* SECTION 2: SHOP & BANK SETTINGS */}
+        {/* SHOP & BANK SETTINGS */}
         {activeMainSection === 'settings' && (
           <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] shadow-xl overflow-hidden">
             {/* Header */}
