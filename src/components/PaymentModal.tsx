@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { QrCode, Building2, Copy, CheckCircle2, AlertTriangle, X, Camera } from "lucide-react";
+import { QrCode, Building2, Copy, CheckCircle2, AlertTriangle, X, Camera, MessageSquare } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
 
@@ -9,9 +9,10 @@ interface PaymentModalProps {
   order: Order;
   settings: ShopSettings;
   onClose: () => void;
+  onOpenTicket?: (order: Order) => void;
 }
 
-export default function PaymentModal({ order, settings, onClose }: PaymentModalProps) {
+export default function PaymentModal({ order, settings, onClose, onOpenTicket }: PaymentModalProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -177,38 +178,51 @@ export default function PaymentModal({ order, settings, onClose }: PaymentModalP
                   📸 BẮT BUỘC PHẢI CÓ ẢNH CHỤP THANH TOÁN ĐỂ ĐƯỢC HỖ TRỢ:
                 </p>
                 <p className="text-zinc-300 leading-relaxed">
-                  Sau khi chuyển tiền, <strong>quý khách vui lòng CHỤP LẠI MÀN HÌNH giao dịch chuyển khoản thành công</strong> để làm bằng chứng. Nếu gặp lỗi, delay hoặc có bất kỳ sự cố gì xảy ra, <strong>bắt buộc phải gửi ảnh chụp thanh toán</strong> thì Admin mới có thể đối soát và hỗ trợ giải quyết cho bạn!
+                  Sau khi chuyển tiền, <strong>quý khách vui lòng CHỤP LẠI MÀN HÌNH giao dịch chuyển khoản thành công</strong> để làm bằng chứng. Nếu gặp lỗi, delay hoặc có bất kỳ sự cố gì xảy ra, <strong>bắt buộc phải gửi ảnh chụp thanh toán</strong> thì Admin mới có thể đối soát và hỗ trợ giải quyết cho bạn! Bạn có thể bấm nút <strong>"Mở Ticket Hỗ Trợ"</strong> bên dưới để nhắn tin trực tiếp với Admin.
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-4 sm:p-6 border-t border-[#1e1e2e] bg-[#0a0a0f] flex flex-col sm:flex-row gap-3 justify-end">
-          <button 
-            onClick={onClose}
-            className="px-6 py-3 font-semibold text-zinc-300 bg-[#1e1e2e] hover:bg-[#2a2a35] rounded-lg transition-colors order-2 sm:order-1"
-          >
-            Đóng
-          </button>
-          <button 
-            onClick={handleConfirmPaid}
-            disabled={loading || success}
-            className={`px-6 py-3 font-bold rounded-lg transition-all order-1 sm:order-2 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)] ${
-              success 
-                ? 'bg-emerald-500 text-black' 
-                : 'bg-amber-500 hover:bg-amber-400 text-black hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]'
-            }`}
-          >
-            {success ? (
-              <>
-                <CheckCircle2 className="w-5 h-5" />
-                ĐÃ XÁC NHẬN!
-              </>
-            ) : (
-              "Tôi Đã Chuyển Khoản ✓"
-            )}
-          </button>
+        <div className="p-4 sm:p-6 border-t border-[#1e1e2e] bg-[#0a0a0f] flex flex-col sm:flex-row gap-3 items-center justify-between">
+          {/* Ticket Support Button */}
+          {onOpenTicket && (
+            <button
+              onClick={() => onOpenTicket(order)}
+              className="w-full sm:w-auto px-5 py-3 font-bold text-white bg-[#5865F2] hover:bg-[#4752C4] rounded-lg transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:scale-[1.02]"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>💬 Mở Ticket Nhắn Cho Admin</span>
+            </button>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto justify-end">
+            <button 
+              onClick={onClose}
+              className="px-6 py-3 font-semibold text-zinc-300 bg-[#1e1e2e] hover:bg-[#2a2a35] rounded-lg transition-colors order-2 sm:order-1 text-center"
+            >
+              Đóng
+            </button>
+            <button 
+              onClick={handleConfirmPaid}
+              disabled={loading || success}
+              className={`px-6 py-3 font-bold rounded-lg transition-all order-1 sm:order-2 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)] ${
+                success 
+                  ? 'bg-emerald-500 text-black' 
+                  : 'bg-amber-500 hover:bg-amber-400 text-black hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+              }`}
+            >
+              {success ? (
+                <>
+                  <CheckCircle2 className="w-5 h-5" />
+                  ĐÃ XÁC NHẬN!
+                </>
+              ) : (
+                "Tôi Đã Chuyển Khoản ✓"
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

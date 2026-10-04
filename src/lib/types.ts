@@ -42,3 +42,12 @@ export interface ShopSettings {
   qr_image_url?: string; // Link ảnh QR tùy chỉnh của shop
   custom_catalog?: string; // JSON string chứa danh mục các gói bán do admin tùy chỉnh
 }
+
+export interface OrderMessage {
+  id: number | string;
+  order_id: string;
+  sender: 'customer' | 'admin';
+  sender_name?: string;
+  message: string;
+  created_at: string;
+}

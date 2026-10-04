@@ -20,11 +20,14 @@ import {
   QrCode, 
   Save, 
   Radio,
-  ImageIcon
+  ImageIcon,
+  Trash2,
+  MessageSquare
 } from 'lucide-react';
 import { Order, ShopSettings } from '@/lib/types';
 import { cn, formatNumber, formatVND, getStatusColor, getStatusLabel } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import OrderTicketModal from './OrderTicketModal';
 
 interface AdminDashboardProps {
   pin: string;
@@ -67,6 +70,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showPreviewQr, setShowPreviewQr] = useState(false);
+  const [ticketOrder, setTicketOrder] = useState<Order | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Fetch orders
   const fetchOrders = async () => {
@@ -187,6 +192,40 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
       }
     } catch (e) {
       console.error('Update order status error:', e);
+    }
+  };
+
+  // Delete order (BẮT BUỘC ĐÃ HỦY MỚI ĐƯỢC XÓA)
+  const handleDeleteOrder = async (id: string, status: string) => {
+    if (status !== 'cancelled') {
+      alert('⚠️ BẮT BUỘC PHẢI HỦY ĐƠN TRƯỚC KHI XÓA!\nVui lòng bấm HỦY đơn này trước rồi mới có thể xóa vĩnh viễn.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN đơn hàng #${id}?\nThao tác này sẽ xóa đơn và toàn bộ tin nhắn ticket liên quan khỏi hệ thống.`);
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/orders?id=${id}`, {
+        method: 'DELETE',
+        headers: {
+          'x-admin-pin': pin.trim()
+        }
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setOrders(prev => prev.filter(o => o.id !== id));
+        alert('Đã xóa vĩnh viễn đơn hàng thành công!');
+      } else {
+        alert(data.error || 'Lỗi khi xóa đơn hàng');
+      }
+    } catch (e) {
+      console.error('Delete order error:', e);
+      alert('Lỗi kết nối khi xóa đơn hàng');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -744,75 +783,110 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                           )}
                         </td>
                         <td className="p-4 text-right">
-                          {(order.status === 'pending' || order.status === 'paid_waiting') ? (
-                            <div className="flex items-center justify-end gap-2 relative">
-                              {/* Nút Xác nhận đã mua AH */}
-                              <button 
-                                onClick={() => updateOrderStatus(order.id, 'completed')} 
-                                title="Admin vào game mua món đồ /ah của khách xong bấm nút này" 
-                                className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-bold text-[#0a0a0f] transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                              >
-                                <Check size={14} /> 
-                                <span>ĐÃ MUA AH</span>
-                              </button>
+                          <div className="flex items-center justify-end gap-2 relative">
+                            {/* Nút Mở Ticket Chat */}
+                            <button
+                              onClick={() => setTicketOrder(order)}
+                              title="Mở Ticket Chat với khách hàng"
+                              className="flex items-center gap-1.5 rounded-lg bg-[#5865F2]/15 border border-[#5865F2]/40 hover:bg-[#5865F2] hover:text-white px-2.5 py-1.5 text-xs font-bold text-[#9aa4fa] transition-all shadow-[0_0_10px_rgba(88,101,242,0.15)]"
+                            >
+                              <MessageSquare size={13} />
+                              <span>Ticket</span>
+                            </button>
 
-                              {/* Nút Hủy Đơn */}
-                              <div className="relative">
+                            {(order.status === 'pending' || order.status === 'paid_waiting') && (
+                              <>
+                                {/* Nút Xác nhận đã mua AH */}
                                 <button 
-                                  onClick={() => setCancelDropdown(cancelDropdown === order.id ? null : order.id)} 
-                                  title="Hủy đơn hàng" 
-                                  className="flex items-center gap-1 rounded-lg bg-red-500/10 border border-red-500/30 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                                  onClick={() => updateOrderStatus(order.id, 'completed')} 
+                                  title="Admin vào game mua món đồ /ah của khách xong bấm nút này" 
+                                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-bold text-[#0a0a0f] transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                                 >
-                                  <X size={14} /> 
-                                  <span>Hủy</span>
+                                  <Check size={14} /> 
+                                  <span>ĐÃ MUA AH</span>
                                 </button>
-                                
-                                {/* Cancel Dropdown Modal */}
-                                {cancelDropdown === order.id && (
-                                  <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-3 shadow-2xl z-20 text-left">
-                                    <p className="mb-2 text-xs font-bold text-zinc-300">Chọn lý do hủy đơn:</p>
-                                    <div className="space-y-1 mb-2">
-                                      {cancelReasonsList.map(r => (
+
+                                {/* Nút Hủy Đơn */}
+                                <div className="relative">
+                                  <button 
+                                    onClick={() => setCancelDropdown(cancelDropdown === order.id ? null : order.id)} 
+                                    title="Hủy đơn hàng" 
+                                    className="flex items-center gap-1 rounded-lg bg-red-500/10 border border-red-500/30 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                                  >
+                                    <X size={14} /> 
+                                    <span>Hủy</span>
+                                  </button>
+                                  
+                                  {/* Cancel Dropdown Modal */}
+                                  {cancelDropdown === order.id && (
+                                    <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-3 shadow-2xl z-20 text-left">
+                                      <p className="mb-2 text-xs font-bold text-zinc-300">Chọn lý do hủy đơn:</p>
+                                      <div className="space-y-1 mb-2">
+                                        {cancelReasonsList.map(r => (
+                                          <button 
+                                            key={r} 
+                                            onClick={() => setCancelReason(r)} 
+                                            className={cn(
+                                              "block w-full text-left rounded-lg p-2 text-xs transition-colors", 
+                                              cancelReason === r ? "bg-red-500/20 text-red-300 border border-red-500/40" : "text-zinc-400 hover:bg-[#1e1e2e]"
+                                            )}
+                                          >
+                                            {r}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      <input 
+                                        type="text" 
+                                        placeholder="Hoặc nhập lý do khác..." 
+                                        value={cancelReason} 
+                                        onChange={e => setCancelReason(e.target.value)} 
+                                        className="mb-3 w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] p-2 text-xs text-white outline-none focus:border-red-500" 
+                                      />
+                                      <div className="flex justify-end gap-2">
                                         <button 
-                                          key={r} 
-                                          onClick={() => setCancelReason(r)} 
-                                          className={cn(
-                                            "block w-full text-left rounded-lg p-2 text-xs transition-colors", 
-                                            cancelReason === r ? "bg-red-500/20 text-red-300 border border-red-500/40" : "text-zinc-400 hover:bg-[#1e1e2e]"
-                                          )}
+                                          onClick={() => setCancelDropdown(null)} 
+                                          className="rounded-lg px-2.5 py-1 text-xs text-zinc-400 hover:text-white"
                                         >
-                                          {r}
+                                          Đóng
                                         </button>
-                                      ))}
+                                        <button 
+                                          onClick={() => updateOrderStatus(order.id, 'cancelled', cancelReason || 'Admin hủy đơn')} 
+                                          className="rounded-lg bg-red-500 hover:bg-red-600 px-3 py-1 text-xs font-bold text-white shadow-md"
+                                        >
+                                          Xác nhận Hủy
+                                        </button>
+                                      </div>
                                     </div>
-                                    <input 
-                                      type="text" 
-                                      placeholder="Hoặc nhập lý do khác..." 
-                                      value={cancelReason} 
-                                      onChange={e => setCancelReason(e.target.value)} 
-                                      className="mb-3 w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] p-2 text-xs text-white outline-none focus:border-red-500" 
-                                    />
-                                    <div className="flex justify-end gap-2">
-                                      <button 
-                                        onClick={() => setCancelDropdown(null)} 
-                                        className="rounded-lg px-2.5 py-1 text-xs text-zinc-400 hover:text-white"
-                                      >
-                                        Đóng
-                                      </button>
-                                      <button 
-                                        onClick={() => updateOrderStatus(order.id, 'cancelled', cancelReason || 'Admin hủy đơn')} 
-                                        className="rounded-lg bg-red-500 hover:bg-red-600 px-3 py-1 text-xs font-bold text-white shadow-md"
-                                      >
-                                        Xác nhận Hủy
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-zinc-500 italic">Không có thao tác</span>
-                          )}
+                                  )}
+                                </div>
+                              </>
+                            )}
+
+                            {/* Nút XÓA ĐƠN:
+                                BẮT BUỘC ĐÃ HỦY MỚI ĐƯỢC XÓA!
+                                Nếu đơn đã hủy -> nút ĐỎ XÓA VĨNH VIỄN
+                                Nếu đơn chưa hủy -> nút mờ, click báo phải hủy trước */}
+                            {order.status === 'cancelled' ? (
+                              <button
+                                onClick={() => handleDeleteOrder(order.id, order.status)}
+                                disabled={deletingId === order.id}
+                                title="Xóa vĩnh viễn đơn hàng này khỏi hệ thống"
+                                className="flex items-center gap-1 rounded-lg bg-red-500/20 border border-red-500/50 hover:bg-red-500 hover:text-white px-2.5 py-1.5 text-xs font-bold text-red-400 transition-all shadow-[0_0_12px_rgba(239,68,68,0.2)] disabled:opacity-50"
+                              >
+                                <Trash2 size={13} />
+                                <span>{deletingId === order.id ? "Đang xóa..." : "Xóa Đơn"}</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => alert('⚠️ BẮT BUỘC PHẢI HỦY ĐƠN TRƯỚC KHI XÓA!\nĐơn hàng này chưa ở trạng thái ĐÃ HỦY. Vui lòng bấm Hủy đơn trước khi thực hiện thao tác xóa.')}
+                                title="Bắt buộc phải hủy đơn trước khi xóa"
+                                className="flex items-center gap-1 rounded-lg bg-zinc-800/40 border border-zinc-700/20 px-2 py-1.5 text-xs text-zinc-600 cursor-not-allowed opacity-50 hover:opacity-90 transition-opacity"
+                              >
+                                <Trash2 size={13} />
+                                <span className="hidden sm:inline">Xóa</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -832,6 +906,15 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
               </div>
             </div>
           </div>
+        {/* Modal Ticket Chat cho Admin */}
+        {ticketOrder && (
+          <OrderTicketModal
+            order={ticketOrder}
+            isOpen={Boolean(ticketOrder)}
+            onClose={() => setTicketOrder(null)}
+            isAdmin={true}
+            adminPin={pin}
+          />
         )}
 
       </div>

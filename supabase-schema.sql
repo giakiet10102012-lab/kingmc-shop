@@ -48,9 +48,29 @@ INSERT INTO app_configs (key, value) VALUES
 ('bank_owner', 'NGUYEN VAN A')
 ON CONFLICT (key) DO NOTHING;
 
--- Bật realtime cho orders
+-- Bật realtime cho orders & order_messages
 BEGIN;
 DROP PUBLICATION IF EXISTS supabase_realtime;
 CREATE PUBLICATION supabase_realtime;
 COMMIT;
 ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+
+-- Tạo bảng order_messages (Hệ thống Ticket tin nhắn theo từng đơn hàng)
+CREATE TABLE IF NOT EXISTS order_messages (
+    id SERIAL PRIMARY KEY,
+    order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    sender TEXT NOT NULL CHECK (sender IN ('customer', 'admin')),
+    sender_name TEXT,
+    message TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE order_messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Cho phép xem tin nhắn" ON order_messages;
+CREATE POLICY "Cho phép xem tin nhắn" ON order_messages FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Cho phép gửi tin nhắn" ON order_messages;
+CREATE POLICY "Cho phép gửi tin nhắn" ON order_messages FOR INSERT WITH CHECK (true);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE order_messages;

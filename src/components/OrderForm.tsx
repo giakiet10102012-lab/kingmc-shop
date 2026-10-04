@@ -8,11 +8,12 @@ import type { ShopSettings, Order } from "@/lib/types";
 interface OrderFormProps {
   settings: ShopSettings;
   onOrderCreated: (order: Order) => void;
+  userId?: string | null;
 }
 
 const PRESET_AMOUNTS = [5, 10, 20, 50, 100];
 
-export default function OrderForm({ settings, onOrderCreated }: OrderFormProps) {
+export default function OrderForm({ settings, onOrderCreated, userId }: OrderFormProps) {
   const [ign, setIgn] = useState("");
   const [moneyM, setMoneyM] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,7 @@ export default function OrderForm({ settings, onOrderCreated }: OrderFormProps) 
           ign: ign.trim(), 
           money_m: parsedMoney, 
           total_vnd: totalVND,
+          user_id: userId || null
         }),
       });
 
@@ -48,6 +50,18 @@ export default function OrderForm({ settings, onOrderCreated }: OrderFormProps) 
       }
 
       const order: Order = await res.json();
+
+      // Save order id to local list for history lookup
+      if (typeof window !== 'undefined') {
+        try {
+          const prev = JSON.parse(localStorage.getItem('kingmc_my_orders') || '[]');
+          if (!prev.includes(order.id)) {
+            prev.unshift(order.id);
+            localStorage.setItem('kingmc_my_orders', JSON.stringify(prev.slice(0, 50)));
+          }
+        } catch {}
+      }
+
       onOrderCreated(order);
     } catch (err: any) {
       setError(err.message || "Failed to create order");

@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import OrderForm from "@/components/OrderForm";
 import PaymentModal from "@/components/PaymentModal";
+import AuthModal from "@/components/AuthModal";
+import OrderHistoryModal from "@/components/OrderHistoryModal";
+import OrderTicketModal from "@/components/OrderTicketModal";
 import type { ShopSettings, Order } from "@/lib/types";
 import { formatVND } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 import { Zap, ShieldCheck, Clock, CheckCircle2, BellRing, AlertCircle } from "lucide-react";
 
 export default function Home() {
@@ -20,6 +24,32 @@ export default function Home() {
   });
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Auth & Modals State
+  const [user, setUser] = useState<any>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [activeTicketOrder, setActiveTicketOrder] = useState<Order | null>(null);
+
+  // Check Supabase Auth session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   useEffect(() => {
     async function fetchConfig() {
@@ -58,7 +88,13 @@ export default function Home() {
 
   return (
     <>
-      <Header rate={shopSettings.rate_per_m} />
+      <Header 
+        rate={shopSettings.rate_per_m} 
+        user={user}
+        onOpenAuth={() => setShowAuthModal(true)}
+        onOpenHistory={() => setShowHistoryModal(true)}
+        onLogout={handleLogout}
+      />
 
       <main className="flex-1 relative flex flex-col items-center justify-center py-8 md:py-12 px-4">
         {/* Animated Background Gradients */}
@@ -141,6 +177,7 @@ export default function Home() {
           {/* Money Order Form Component */}
           <OrderForm 
             settings={shopSettings} 
+            userId={user?.id}
             onOrderCreated={(order) => setCreatedOrder(order)} 
           />
 
@@ -165,6 +202,40 @@ export default function Home() {
           order={createdOrder} 
           settings={shopSettings} 
           onClose={() => setCreatedOrder(null)} 
+          onOpenTicket={(order) => {
+            setActiveTicketOrder(order);
+          }}
+        />
+      )}
+
+      {/* Auth Modal (Discord & Email) */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={() => setShowAuthModal(false)}
+      />
+
+      {/* Order History Modal */}
+      <OrderHistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        userId={user?.id}
+        userEmail={user?.email}
+        onOpenPayment={(order) => {
+          setCreatedOrder(order);
+        }}
+        onOpenTicket={(order) => {
+          setActiveTicketOrder(order);
+        }}
+      />
+
+      {/* Live Order Ticket Modal for Customer */}
+      {activeTicketOrder && (
+        <OrderTicketModal
+          order={activeTicketOrder}
+          isOpen={Boolean(activeTicketOrder)}
+          onClose={() => setActiveTicketOrder(null)}
+          isAdmin={false}
         />
       )}
     </>
