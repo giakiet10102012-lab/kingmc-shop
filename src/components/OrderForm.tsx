@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { ShoppingCart, Gamepad2, Coins, AlertTriangle, Loader2, Sparkles, Check } from "lucide-react";
-import { formatVND, formatNumber } from "@/lib/utils";
+import { ShoppingCart, Gamepad2, Coins, AlertTriangle, Loader2, Sparkles, Check, Lock, User, Boxes } from "lucide-react";
+import { formatVND, formatNumber, cn } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
 
 interface OrderFormProps {
   settings: ShopSettings;
   onOrderCreated: (order: Order) => void;
   userId?: string | null;
+  onRequireAuth?: () => void;
 }
 
 const PRESET_AMOUNTS = [5, 10, 20, 50, 100];
 
-export default function OrderForm({ settings, onOrderCreated, userId }: OrderFormProps) {
+export default function OrderForm({ settings, onOrderCreated, userId, onRequireAuth }: OrderFormProps) {
   const [ign, setIgn] = useState("");
   const [moneyM, setMoneyM] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
@@ -22,11 +23,35 @@ export default function OrderForm({ settings, onOrderCreated, userId }: OrderFor
   const parsedMoney = typeof moneyM === "number" ? moneyM : 0;
   const currentRate = settings.rate_per_m || 10000;
   const totalVND = parsedMoney * currentRate;
-  const isShopActive = settings.is_active !== false;
-  const isValid = ign.trim().length > 0 && parsedMoney > 0 && isShopActive;
+
+  // Quản lý kho Money (Stock)
+  const stock = settings.money_stock !== undefined ? settings.money_stock : 1000;
+  const isOutOfStock = stock <= 0;
+  const isExceedingStock = parsedMoney > stock;
+  const isShopActive = settings.is_active !== false && !isOutOfStock;
+
+  const isValid = Boolean(
+    userId &&
+    ign.trim().length > 0 && 
+    parsedMoney > 0 && 
+    isShopActive && 
+    !isExceedingStock
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Bắt buộc đăng nhập trước khi tạo đơn
+    if (!userId) {
+      if (onRequireAuth) onRequireAuth();
+      return;
+    }
+
+    if (isExceedingStock) {
+      setError(`Số lượng bạn đặt (${parsedMoney}M) vượt quá số Money còn lại trong kho (${stock}M)!`);
+      return;
+    }
+
     if (!isValid) return;
 
     setLoading(true);
@@ -40,7 +65,7 @@ export default function OrderForm({ settings, onOrderCreated, userId }: OrderFor
           ign: ign.trim(), 
           money_m: parsedMoney, 
           total_vnd: totalVND,
-          user_id: userId || null
+          user_id: userId
         }),
       });
 
@@ -81,22 +106,57 @@ export default function OrderForm({ settings, onOrderCreated, userId }: OrderFor
       
       <form onSubmit={handleSubmit} className="relative bg-[#12121a] border border-[#1e1e2e] rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-6">
         {/* Header of Form */}
-        <div className="flex items-center justify-between border-b border-[#1e1e2e] pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1e1e2e] pb-4">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-400 border border-emerald-500/20">
               <ShoppingCart className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-zinc-100">Đặt Mua Money Ingame</h2>
-              <p className="text-xs text-zinc-400">Điền tên nhân vật và số M muốn mua</p>
+              <p className="text-xs text-zinc-400">Giao dịch tự động qua sàn đấu giá /ah</p>
             </div>
           </div>
 
-          <div className="text-right">
-            <span className="text-[11px] text-zinc-500 block">Tỷ giá áp dụng</span>
-            <span className="text-xs font-bold text-emerald-400">{formatVND(currentRate)} / 1M</span>
+          <div className="flex flex-col items-end gap-1">
+            <div className="text-right">
+              <span className="text-[10px] text-zinc-500 block uppercase tracking-wider">Tỷ giá</span>
+              <span className="text-xs font-bold text-emerald-400">{formatVND(currentRate)} / 1M</span>
+            </div>
+
+            {/* Hiển thị Kho Money (Stock) */}
+            <div className="flex items-center gap-1.5 text-[11px] font-medium">
+              <Boxes size={12} className={isOutOfStock ? "text-red-400" : stock < 100 ? "text-amber-400" : "text-emerald-400"} />
+              <span className="text-zinc-400">Kho còn:</span>
+              <span className={cn(
+                "font-bold font-mono px-1.5 py-0.5 rounded text-[10px]",
+                isOutOfStock 
+                  ? "bg-red-500/20 text-red-400 border border-red-500/30" 
+                  : stock < 100 
+                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" 
+                  : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              )}>
+                {isOutOfStock ? "TẠM HẾT" : `${formatNumber(stock)}M`}
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* Khung nhắc nhở bắt buộc Đăng nhập */}
+        {!userId && (
+          <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#5865F2]/10 border border-[#5865F2]/30 text-xs text-zinc-200 animate-pulse">
+            <div className="flex items-center gap-2">
+              <User size={16} className="text-[#5865F2] shrink-0" />
+              <span>Vui lòng <strong>đăng nhập tài khoản</strong> trước khi mua để bảo vệ quyền lợi và lưu lịch sử.</span>
+            </div>
+            <button
+              type="button"
+              onClick={onRequireAuth}
+              className="px-3 py-1.5 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-xs shrink-0 transition-colors"
+            >
+              Đăng Nhập
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-col gap-5">
           {/* Input 1: IGN */}
@@ -124,7 +184,9 @@ export default function OrderForm({ settings, onOrderCreated, userId }: OrderFor
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold text-zinc-300">Số lượng Money muốn mua (Đơn vị: M)</label>
-              <span className="text-xs text-zinc-400">Tối thiểu: 1M</span>
+              <span className="text-xs text-zinc-400">
+                {isOutOfStock ? "Tạm hết hàng" : `Tối đa trong kho: ${formatNumber(stock)}M`}
+              </span>
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -134,36 +196,60 @@ export default function OrderForm({ settings, onOrderCreated, userId }: OrderFor
                 type="number"
                 required
                 min="1"
+                max={stock > 0 ? stock : 1}
                 step="1"
                 value={moneyM}
-                onChange={(e) => setMoneyM(e.target.value ? Number(e.target.value) : "")}
-                placeholder="Nhập số M cần mua (VD: 10)"
-                className="w-full bg-[#0a0a0f] border border-[#1e1e2e] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl pl-11 pr-12 py-3 text-zinc-100 placeholder:text-zinc-600 transition-colors outline-none font-bold text-lg"
+                onChange={(e) => {
+                  setError(null);
+                  setMoneyM(e.target.value ? Number(e.target.value) : "");
+                }}
+                placeholder={`Nhập số M cần mua (Tối đa: ${stock}M)`}
+                className={cn(
+                  "w-full bg-[#0a0a0f] border rounded-xl pl-11 pr-12 py-3 text-zinc-100 placeholder:text-zinc-600 transition-colors outline-none font-bold text-lg",
+                  isExceedingStock 
+                    ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500 text-red-400" 
+                    : "border-[#1e1e2e] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                )}
               />
               <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-sm font-bold text-zinc-500">
                 M
               </div>
             </div>
 
+            {/* Cảnh báo vượt quá stock */}
+            {isExceedingStock && (
+              <p className="text-xs font-semibold text-red-400 flex items-center gap-1 mt-1">
+                <AlertTriangle size={13} />
+                Số lượng đặt ({parsedMoney}M) vượt quá số Money hiện có trong kho ({stock}M)!
+              </p>
+            )}
+
             {/* Quick amount presets */}
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <span className="text-xs text-zinc-500 flex items-center gap-1">
                 <Sparkles size={12} className="text-emerald-400" /> Chọn nhanh:
               </span>
-              {PRESET_AMOUNTS.map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  onClick={() => handleSelectPreset(amt)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
-                    moneyM === amt
-                      ? "bg-emerald-500 text-[#0a0a0f] font-bold shadow-[0_0_10px_rgba(16,185,129,0.4)]"
-                      : "border border-[#1e1e2e] bg-[#0a0a0f] text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-400"
-                  }`}
-                >
-                  +{amt}M
-                </button>
-              ))}
+              {PRESET_AMOUNTS.map((amt) => {
+                const disabledPreset = amt > stock;
+                return (
+                  <button
+                    key={amt}
+                    type="button"
+                    disabled={disabledPreset}
+                    onClick={() => handleSelectPreset(amt)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 text-xs font-semibold transition-all",
+                      disabledPreset
+                        ? "border border-[#1e1e2e]/50 text-zinc-600 opacity-40 cursor-not-allowed"
+                        : moneyM === amt
+                        ? "bg-emerald-500 text-[#0a0a0f] font-bold shadow-[0_0_10px_rgba(16,185,129,0.4)]"
+                        : "border border-[#1e1e2e] bg-[#0a0a0f] text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-400"
+                    )}
+                  >
+                    +{amt}M
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -217,22 +303,38 @@ export default function OrderForm({ settings, onOrderCreated, userId }: OrderFor
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={!isValid || loading}
-          className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-[#1e1e2e] disabled:text-zinc-600 text-[#0a0a0f] font-black rounded-xl transition-all shadow-[0_0_25px_rgba(16,185,129,0.3)] hover:shadow-[0_0_35px_rgba(16,185,129,0.6)] disabled:shadow-none flex items-center justify-center gap-2 text-base sm:text-lg cursor-pointer disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              ĐANG KHỞI TẠO ĐƠN HÀNG...
-            </>
-          ) : !isShopActive ? (
-            "SHOP HIỆN TẠI TẠM ĐÓNG"
-          ) : (
-            "TẠO ĐƠN VÀ THANH TOÁN"
-          )}
-        </button>
+        {/* Nút đặt hàng: BẮT BUỘC ĐĂNG NHẬP HOẶC TẠO ĐƠN */}
+        {!userId ? (
+          <button
+            type="button"
+            onClick={onRequireAuth}
+            className="w-full py-4 bg-gradient-to-r from-[#5865F2] to-[#4752C4] hover:brightness-110 text-white font-black rounded-xl transition-all shadow-[0_0_25px_rgba(88,101,242,0.4)] flex items-center justify-center gap-2 text-base sm:text-lg cursor-pointer"
+          >
+            <Lock size={18} />
+            <span>ĐĂNG NHẬP ĐỂ MUA HÀNG</span>
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!isValid || loading}
+            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-[#1e1e2e] disabled:text-zinc-600 text-[#0a0a0f] font-black rounded-xl transition-all shadow-[0_0_25px_rgba(16,185,129,0.3)] hover:shadow-[0_0_35px_rgba(16,185,129,0.6)] disabled:shadow-none flex items-center justify-center gap-2 text-base sm:text-lg cursor-pointer disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                ĐANG KHỞI TẠO ĐƠN HÀNG...
+              </>
+            ) : isOutOfStock ? (
+              "KHO HIỆN TẠI TẠM HẾT HÀNG"
+            ) : isExceedingStock ? (
+              `VƯỢT QUÁ SỐ LƯỢNG KHO (${stock}M)`
+            ) : !isShopActive ? (
+              "SHOP HIỆN TẠI TẠM ĐÓNG"
+            ) : (
+              "TẠO ĐƠN VÀ THANH TOÁN"
+            )}
+          </button>
+        )}
       </form>
     </div>
   );

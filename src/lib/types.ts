@@ -42,6 +42,7 @@ export interface ShopSettings {
   is_active?: boolean;
   qr_image_url?: string; // Link ảnh QR tùy chỉnh của shop
   custom_catalog?: string; // JSON string chứa danh mục các gói bán do admin tùy chỉnh
+  money_stock?: number; // Số lượng Money (M) còn trong kho của shop
 }
 
 export interface OrderMessage {

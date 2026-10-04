@@ -25,6 +25,13 @@ export async function POST(req: Request) {
   try {
     const { ign, money_m, total_vnd, user_id } = await req.json();
     
+    // YÊU CẦU BẮT BUỘC ĐĂNG NHẬP TRƯỚC KHI MUA HÀNG
+    if (!user_id) {
+      return NextResponse.json({ 
+        error: 'Vui lòng đăng nhập hoặc đăng ký tài khoản trước khi đặt hàng để lưu lịch sử giao dịch!' 
+      }, { status: 401 });
+    }
+
     if (!ign || money_m === undefined || total_vnd === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -33,6 +40,32 @@ export async function POST(req: Request) {
     if (!supabase) {
       return NextResponse.json({ error: 'Chưa cấu hình Supabase URL hoặc Key trên Vercel.' }, { status: 500 });
     }
+
+    // KIỂM TRA SỐ LƯỢNG MONEY TRONG KHO (STOCK)
+    try {
+      const { data: stockConfig } = await supabase
+        .from('app_configs')
+        .select('value')
+        .eq('key', 'money_stock')
+        .maybeSingle();
+
+      if (stockConfig && stockConfig.value !== undefined) {
+        const currentStock = Number(stockConfig.value);
+        if (!isNaN(currentStock) && currentStock <= 0) {
+          return NextResponse.json({ 
+            error: 'Shop hiện tại đang tạm hết Money trong kho (Stock = 0M). Vui lòng quay lại sau ít phút!' 
+          }, { status: 400 });
+        }
+        if (!isNaN(currentStock) && money_m > currentStock) {
+          return NextResponse.json({ 
+            error: `Số lượng bạn đặt (${money_m}M) vượt quá số lượng Money còn trong kho (${currentStock}M)!` 
+          }, { status: 400 });
+        }
+      }
+    } catch (stockErr) {
+      console.warn('Check stock warning:', stockErr);
+    }
+
     const id = generateOrderId();
     
     const { data, error } = await supabase
@@ -77,7 +110,7 @@ export async function GET(req: Request) {
 
     let query = supabase.from('orders').select('*').order('created_at', { ascending: false });
 
-    if (status && status !== 'all') {
+    if (status && status !== 'all' && status !== 'hidden') {
       query = query.eq('status', status);
     }
     if (userId) {
@@ -89,10 +122,9 @@ export async function GET(req: Request) {
     const { data, error } = await query;
     if (error) throw error;
 
-    // NẾU LÀ ADMIN VÀ KHÔNG YÊU CẦU XEM ĐƠN ĐÃ DỌN DẸP:
-    // Tự động lọc bỏ các đơn đã bị admin xóa/ẩn để admin không bị rối mắt
-    if (isAdmin && !includeHidden && Array.isArray(data)) {
-      // Đọc thêm danh sách đơn ẩn từ app_configs để đồng bộ dữ liệu
+    // NẾU LÀ ADMIN:
+    if (isAdmin && Array.isArray(data)) {
+      // Đọc danh sách đơn ẩn từ app_configs để đồng bộ dữ liệu
       try {
         const { data: configs } = await supabase
           .from('app_configs')
@@ -106,6 +138,13 @@ export async function GET(req: Request) {
         }
       } catch {}
 
+      // Nếu Admin yêu cầu xem danh sách "Đã Dọn Dẹp"
+      if (includeHidden || status === 'hidden') {
+        const hiddenOrders = data.filter((o: any) => o.hidden_from_admin === true || adminHiddenOrders.has(o.id));
+        return NextResponse.json(hiddenOrders);
+      }
+
+      // Mặc định: lọc bỏ các đơn đã dọn dẹp để admin không bị rối mắt
       const visibleOrders = data.filter((o: any) => {
         if (o.hidden_from_admin === true) return false;
         if (adminHiddenOrders.has(o.id)) return false;
@@ -162,6 +201,7 @@ export async function PATCH(req: Request) {
 }
 
 // XÓA ĐƠN KHỎI GIAO DIỆN ADMIN (NHƯNG MEMBER VẪN XEM ĐƯỢC TRONG LỊCH SỬ MUA)
+// VÀ XÓA LUÔN TICKET CỦA ĐƠN ĐÓ
 export async function DELETE(req: Request) {
   try {
     if (!checkAdmin(req)) {
@@ -170,7 +210,7 @@ export async function DELETE(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
-    const action = searchParams.get('action'); // 'hide' (default) | 'restore' | 'hard'
+    const action = searchParams.get('action'); // 'hide' (default) | 'restore' | 'permanent'
 
     if (!id) {
       return NextResponse.json({ error: 'Thiếu mã đơn hàng cần thao tác' }, { status: 400 });
@@ -210,12 +250,31 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ success: true, message: 'Đã khôi phục đơn hàng vào bảng quản lý của Admin' });
     }
 
-    // MẶC ĐỊNH: XÓA ĐƠN KHỎI BẢNG ADMIN (SOFT-DELETE / ẨN ĐƠN KHỎI BẢNG QUẢN LÝ)
-    // Giúp Admin không bị loạn mắt khi có quá nhiều đơn cũ.
-    // Đơn hàng VẪN NẰM TRONG CƠ SỞ DỮ LIỆU để Khách hàng (Member) vẫn xem được 100% trong Lịch Sử Mua của họ!
+    // NẾU ADMIN MUỐN XÓA VĨNH VIỄN KHỎI DATABASE
+    if (action === 'permanent') {
+      try {
+        await supabase.from('order_messages').delete().eq('order_id', id);
+      } catch {}
+      try {
+        await supabase.from('app_configs').delete().eq('key', `admin_hidden_${id}`);
+      } catch {}
+      adminHiddenOrders.delete(id);
+      const { error: delErr } = await supabase.from('orders').delete().eq('id', id);
+      if (delErr) throw delErr;
+      return NextResponse.json({ success: true, message: 'Đã xóa vĩnh viễn đơn hàng khỏi cơ sở dữ liệu' });
+    }
+
+    // MẶC ĐỊNH: XÓA ĐƠN KHỎI BẢNG ADMIN (SOFT-DELETE) & XÓA LUÔN TICKET CỦA ĐƠN ĐÓ
+    // 1. Xóa luôn toàn bộ tin nhắn ticket của đơn hàng này theo yêu cầu:
+    try {
+      await supabase.from('order_messages').delete().eq('order_id', id);
+    } catch (ticketErr) {
+      console.warn('Delete ticket messages warning:', ticketErr);
+    }
+
+    // 2. Ẩn đơn khỏi bảng Admin (Khách hàng Member vẫn xem được trong lịch sử mua):
     adminHiddenOrders.add(id);
 
-    // 1. Lưu vào bảng app_configs (Đảm bảo lưu thành công ngay cả khi bảng orders chưa có cột mới)
     try {
       await supabase.from('app_configs').upsert({
         key: `admin_hidden_${id}`,
@@ -226,14 +285,13 @@ export async function DELETE(req: Request) {
       console.warn('Upsert admin_hidden config warning:', cfgErr);
     }
 
-    // 2. Cập nhật cột hidden_from_admin trên bảng orders nếu cột đã được tạo
     try {
       await supabase.from('orders').update({ hidden_from_admin: true }).eq('id', id);
     } catch {}
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Đã xóa đơn khỏi giao diện Admin thành công (Member vẫn xem được trong lịch sử mua).' 
+      message: 'Đã dọn dẹp đơn khỏi bảng Admin và xóa ticket liên quan (Member vẫn xem được trong lịch sử mua).' 
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

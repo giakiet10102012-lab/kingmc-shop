@@ -10,7 +10,7 @@ import OrderTicketModal from "@/components/OrderTicketModal";
 import type { ShopSettings, Order } from "@/lib/types";
 import { formatVND } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { Zap, ShieldCheck, Clock, CheckCircle2, BellRing, AlertCircle } from "lucide-react";
+import { Zap, ShieldCheck, Clock, CheckCircle2, BellRing, AlertCircle, MessageSquare } from "lucide-react";
 
 export default function Home() {
   const [shopSettings, setShopSettings] = useState<ShopSettings>({
@@ -86,6 +86,33 @@ export default function Home() {
     fetchConfig();
   }, []);
 
+  // Mở Ticket Hỗ Trợ chung giữa Khách và Admin
+  const handleOpenGeneralSupport = () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    const supportId = `SUPPORT-${user.id.slice(0, 8).toUpperCase()}`;
+    const displayName = user?.user_metadata?.custom_claims?.global_name || 
+                        user?.user_metadata?.full_name || 
+                        user?.email?.split('@')[0] || 
+                        'Thành Viên';
+
+    const supportOrder: Order = {
+      id: supportId,
+      ign: displayName,
+      money_m: 0,
+      total_vnd: 0,
+      status: 'completed',
+      created_at: new Date().toISOString(),
+      cancel_reason: null,
+      user_id: user.id
+    };
+
+    setActiveTicketOrder(supportOrder);
+  };
+
   return (
     <>
       <Header 
@@ -93,6 +120,7 @@ export default function Home() {
         user={user}
         onOpenAuth={() => setShowAuthModal(true)}
         onOpenHistory={() => setShowHistoryModal(true)}
+        onOpenSupport={handleOpenGeneralSupport}
         onLogout={handleLogout}
       />
 
@@ -178,6 +206,7 @@ export default function Home() {
           <OrderForm 
             settings={shopSettings} 
             userId={user?.id}
+            onRequireAuth={() => setShowAuthModal(true)}
             onOrderCreated={(order) => setCreatedOrder(order)} 
           />
 
@@ -238,6 +267,16 @@ export default function Home() {
           isAdmin={false}
         />
       )}
+
+      {/* Floating Support Ticket Button */}
+      <button
+        onClick={handleOpenGeneralSupport}
+        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold shadow-[0_0_25px_rgba(16,185,129,0.4)] transition-all hover:scale-105 active:scale-95 cursor-pointer"
+        title="Mở Ticket Chat Hỗ Trợ Trực Tiếp với Admin"
+      >
+        <MessageSquare className="w-5 h-5 fill-black" />
+        <span className="text-xs sm:text-sm font-black uppercase tracking-wider">Ticket Hỗ Trợ</span>
+      </button>
     </>
   );
 }

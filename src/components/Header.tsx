@@ -9,6 +9,7 @@ interface HeaderProps {
   user?: any;
   onOpenAuth?: () => void;
   onOpenHistory?: () => void;
+  onOpenSupport?: () => void;
   onLogout?: () => void;
 }
 
@@ -17,6 +18,7 @@ export default function Header({
   user, 
   onOpenAuth, 
   onOpenHistory, 
+  onOpenSupport,
   onLogout 
 }: HeaderProps) {
   const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
@@ -48,6 +50,16 @@ export default function Header({
               Tỷ giá: <strong className="text-emerald-400">{rate ? formatVND(rate) : "10,000đ"} / 1M</strong>
             </span>
           </div>
+
+          {/* Ticket Hỗ Trợ Button */}
+          <button
+            onClick={onOpenSupport}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/30 hover:border-[#5865F2]/60 text-xs font-semibold text-[#8fa0ff] transition-all hover:text-white"
+            title="Mở Ticket Hỗ Trợ trực tiếp với Admin"
+          >
+            <MessageSquare size={15} className="text-[#5865F2]" />
+            <span className="hidden sm:inline">Hỗ Trợ</span>
+          </button>
 
           {/* Order History Button */}
           <button

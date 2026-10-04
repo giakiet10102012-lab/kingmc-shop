@@ -10,7 +10,8 @@ const DEFAULT_SETTINGS: ShopSettings = {
   bank_owner: 'NGUYEN VAN A',
   shop_notice: '',
   is_active: true,
-  qr_image_url: ''
+  qr_image_url: '',
+  money_stock: 1000
 };
 
 // Global in-memory cache fallback in case Supabase is unavailable
@@ -44,6 +45,8 @@ export async function GET(req: Request) {
             settings.rate_per_m = Number(row.value) || settings.rate_per_m;
           } else if (row.key === 'is_active') {
             settings.is_active = row.value !== 'false';
+          } else if (row.key === 'money_stock') {
+            settings.money_stock = Number(row.value) !== undefined ? Number(row.value) : 1000;
           } else {
             (settings as any)[row.key] = row.value;
           }

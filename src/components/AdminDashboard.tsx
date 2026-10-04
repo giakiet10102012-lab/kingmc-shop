@@ -22,7 +22,9 @@ import {
   Radio,
   ImageIcon,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  RotateCcw,
+  Boxes
 } from 'lucide-react';
 import { Order, ShopSettings } from '@/lib/types';
 import { cn, formatNumber, formatVND, getStatusColor, getStatusLabel } from '@/lib/utils';
@@ -58,11 +60,12 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     bank_owner: 'NGUYEN VAN A',
     shop_notice: '',
     is_active: true,
-    qr_image_url: ''
+    qr_image_url: '',
+    money_stock: 1000
   });
 
   const [activeMainSection, setActiveMainSection] = useState<'orders' | 'settings'>('orders');
-  const [activeTab, setActiveTab] = useState<'all' | 'paid_waiting' | 'pending' | 'completed' | 'cancelled'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'paid_waiting' | 'pending' | 'completed' | 'cancelled' | 'hidden'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cancelDropdown, setCancelDropdown] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -72,6 +75,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   const [showPreviewQr, setShowPreviewQr] = useState(false);
   const [ticketOrder, setTicketOrder] = useState<Order | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [hiddenOrders, setHiddenOrders] = useState<Order[]>([]);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Fetch orders
   const fetchOrders = async () => {
@@ -95,6 +100,21 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
       console.error('Fetch orders error:', e);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // Fetch hidden/archived orders
+  const fetchHiddenOrders = async () => {
+    try {
+      const res = await fetch('/api/orders?status=hidden&include_hidden=true', {
+        headers: { 'x-admin-pin': pin.trim() }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHiddenOrders(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Fetch hidden orders error:', e);
     }
   };
 
@@ -131,12 +151,14 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
 
   useEffect(() => {
     fetchOrders();
+    fetchHiddenOrders();
     fetchSettings();
 
     // Supabase Realtime subscription
     const channel = supabase.channel('admin-orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         fetchOrders();
+        fetchHiddenOrders();
       })
       .subscribe();
 
@@ -240,6 +262,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
         }
 
         setOrders(prev => prev.filter(o => o.id !== id));
+        fetchHiddenOrders();
         alert('Đã xóa đơn khỏi giao diện Admin thành công!\n(Khách hàng vẫn xem được trong Lịch Sử Mua của họ)');
       } else {
         alert(data.error || 'Lỗi khi xóa đơn hàng');
@@ -247,6 +270,65 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     } catch (e) {
       console.error('Delete order error:', e);
       alert('Lỗi kết nối khi xóa đơn hàng');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Khôi phục đơn đã dọn dẹp trở lại bảng chính
+  const handleRestoreOrder = async (id: string) => {
+    setRestoringId(id);
+    try {
+      const res = await fetch(`/api/orders?id=${id}&action=restore`, {
+        method: 'DELETE',
+        headers: { 'x-admin-pin': pin.trim() }
+      });
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          try {
+            const current = JSON.parse(localStorage.getItem('kingmc_admin_hidden_orders') || '[]');
+            const updated = current.filter((x: string) => x !== id);
+            localStorage.setItem('kingmc_admin_hidden_orders', JSON.stringify(updated));
+          } catch {}
+        }
+        setHiddenOrders(prev => prev.filter(o => o.id !== id));
+        fetchOrders();
+        alert(`Đã khôi phục đơn #${id} trở lại bảng quản lý chính!`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Lỗi khi khôi phục đơn');
+      }
+    } catch {
+      alert('Lỗi kết nối khi khôi phục đơn');
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  // Xóa vĩnh viễn đơn khỏi cơ sở dữ liệu (Database)
+  const handlePermanentDelete = async (id: string) => {
+    const confirmed = window.confirm(
+      `⚠️ BẠN CÓ CHẮC MUỐN XÓA VĨNH VIỄN đơn #${id} KHỎI CƠ SỞ DỮ LIỆU?\n\n` +
+      `Thao tác này sẽ xóa đơn và tin nhắn ticket thật khỏi hệ thống.\n` +
+      `Khách hàng cũng sẽ không còn thấy đơn này trong lịch sử mua nữa.`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/orders?id=${id}&action=permanent`, {
+        method: 'DELETE',
+        headers: { 'x-admin-pin': pin.trim() }
+      });
+      if (res.ok) {
+        setHiddenOrders(prev => prev.filter(o => o.id !== id));
+        alert('Đã xóa vĩnh viễn đơn hàng khỏi cơ sở dữ liệu!');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Lỗi khi xóa vĩnh viễn');
+      }
+    } catch {
+      alert('Lỗi kết nối');
     } finally {
       setDeletingId(null);
     }
@@ -261,26 +343,28 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     }));
   };
 
-  // Financial Stats
+  // Financial Stats (Tính tổng tích lũy kể cả các đơn đã dọn dẹp)
   const stats = useMemo(() => {
-    const completedOrders = orders.filter(o => o.status === 'completed');
-    const totalRevenue = completedOrders.reduce((acc, curr) => acc + (Number(curr.total_vnd) || 0), 0);
-    const totalM = completedOrders.reduce((acc, curr) => acc + (Number(curr.money_m) || 0), 0);
+    const allCompleted = [...orders, ...hiddenOrders].filter(o => o.status === 'completed');
+    const totalRevenue = allCompleted.reduce((acc, curr) => acc + (Number(curr.total_vnd) || 0), 0);
+    const totalM = allCompleted.reduce((acc, curr) => acc + (Number(curr.money_m) || 0), 0);
 
     return {
       total: orders.length,
       waitingAdmin: orders.filter(o => o.status === 'paid_waiting').length,
       pending: orders.filter(o => o.status === 'pending').length,
-      completed: completedOrders.length,
+      completed: orders.filter(o => o.status === 'completed').length,
       cancelled: orders.filter(o => o.status === 'cancelled').length,
+      hidden: hiddenOrders.length,
       totalRevenue,
       totalM
     };
-  }, [orders]);
+  }, [orders, hiddenOrders]);
 
   // Filtered orders
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
+    const listToFilter = activeTab === 'hidden' ? hiddenOrders : orders;
+    return listToFilter.filter(o => {
       // Tab filter
       if (activeTab === 'paid_waiting' && o.status !== 'paid_waiting') return false;
       if (activeTab === 'pending' && o.status !== 'pending') return false;
@@ -296,7 +380,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
       }
       return true;
     });
-  }, [orders, activeTab, searchTerm]);
+  }, [orders, hiddenOrders, activeTab, searchTerm]);
 
   const cancelReasonsList = [
     'Sai nội dung chuyển khoản',
@@ -333,6 +417,11 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
               <span className={cn("font-bold", settings.is_active !== false ? "text-emerald-400" : "text-amber-400")}>
                 {settings.is_active !== false ? "🟢 Mở cửa" : "🟡 Tạm đóng"}
               </span>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs sm:text-sm font-medium text-amber-400">
+              <Boxes size={14} />
+              <span>Kho: <strong>{settings.money_stock !== undefined ? `${formatNumber(settings.money_stock)}M` : "1000M"}</strong></span>
             </div>
           </div>
 
@@ -502,6 +591,57 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                     />
                     <p className="text-[11px] text-zinc-500">Để trống nếu không muốn hiển thị banner thông báo.</p>
                   </div>
+                </div>
+
+                {/* Quản lý Kho Money (Stock) */}
+                <div className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 md:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-sm font-bold text-amber-400 flex items-center gap-2">
+                      <Boxes size={18} />
+                      <span>Kho Money Còn Lại Trong Shop (Stock)</span>
+                    </label>
+                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      Hiện tại: {settings.money_stock !== undefined ? `${formatNumber(settings.money_stock)}M` : "1000M"}
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <input 
+                      type="number" 
+                      min="0"
+                      step="1"
+                      value={settings.money_stock !== undefined ? settings.money_stock : 1000} 
+                      onChange={e => setSettings({...settings, money_stock: Number(e.target.value) || 0})}
+                      placeholder="1000"
+                      className="w-full rounded-xl border border-[#1e1e2e] bg-[#0a0a0f] px-4 py-3 text-lg font-bold text-amber-400 outline-none focus:border-amber-500 transition-colors"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-zinc-400 font-bold">
+                      M Ingame
+                    </div>
+                  </div>
+
+                  {/* Quick stock adjustment buttons */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-xs text-zinc-400">Chọn nhanh:</span>
+                    {[0, 100, 200, 500, 1000, 2000, 5000].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setSettings({...settings, money_stock: val})}
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors",
+                          settings.money_stock === val 
+                            ? "bg-amber-500 text-black font-bold shadow-[0_0_10px_rgba(245,158,11,0.3)]" 
+                            : "border border-[#1e1e2e] bg-[#12121a] text-zinc-300 hover:border-amber-500/40"
+                        )}
+                      >
+                        {val === 0 ? "0M (Hết hàng)" : `${val}M`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-zinc-400">
+                    💡 Khách hàng sẽ <strong>không thể đặt mua</strong> vượt quá số lượng trong kho này. Khi kho = 0M, shop tự động chuyển sang trạng thái <strong>Hết Hàng</strong>.
+                  </p>
                 </div>
               </div>
 
@@ -740,6 +880,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                   { id: 'pending', label: 'Chờ thanh toán', count: stats.pending },
                   { id: 'completed', label: 'Đã hoàn thành', count: stats.completed },
                   { id: 'cancelled', label: 'Đã hủy', count: stats.cancelled },
+                  { id: 'hidden', label: '🧹 Đã Dọn Dẹp', count: stats.hidden },
                 ].map(tab => (
                   <button 
                     key={tab.id} 
@@ -817,97 +958,125 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                               <span>Ticket</span>
                             </button>
 
-                            {(order.status === 'pending' || order.status === 'paid_waiting') && (
+                            {activeTab === 'hidden' ? (
                               <>
-                                {/* Nút Xác nhận đã mua AH */}
-                                <button 
-                                  onClick={() => updateOrderStatus(order.id, 'completed')} 
-                                  title="Admin vào game mua món đồ /ah của khách xong bấm nút này" 
-                                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-bold text-[#0a0a0f] transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                {/* Nút Khôi phục đơn về bảng chính */}
+                                <button
+                                  onClick={() => handleRestoreOrder(order.id)}
+                                  disabled={restoringId === order.id}
+                                  title="Khôi phục đơn trở lại bảng quản lý chính"
+                                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/50 hover:bg-emerald-500 hover:text-black px-2.5 py-1.5 text-xs font-bold text-emerald-400 transition-all shadow-[0_0_12px_rgba(16,185,129,0.2)] disabled:opacity-50"
                                 >
-                                  <Check size={14} /> 
-                                  <span>ĐÃ MUA AH</span>
+                                  <RotateCcw size={13} />
+                                  <span>{restoringId === order.id ? "Đang khôi phục..." : "Khôi phục"}</span>
                                 </button>
 
-                                {/* Nút Hủy Đơn */}
-                                <div className="relative">
-                                  <button 
-                                    onClick={() => setCancelDropdown(cancelDropdown === order.id ? null : order.id)} 
-                                    title="Hủy đơn hàng" 
-                                    className="flex items-center gap-1 rounded-lg bg-red-500/10 border border-red-500/30 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
-                                  >
-                                    <X size={14} /> 
-                                    <span>Hủy</span>
-                                  </button>
-                                  
-                                  {/* Cancel Dropdown Modal */}
-                                  {cancelDropdown === order.id && (
-                                    <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-3 shadow-2xl z-20 text-left">
-                                      <p className="mb-2 text-xs font-bold text-zinc-300">Chọn lý do hủy đơn:</p>
-                                      <div className="space-y-1 mb-2">
-                                        {cancelReasonsList.map(r => (
-                                          <button 
-                                            key={r} 
-                                            onClick={() => setCancelReason(r)} 
-                                            className={cn(
-                                              "block w-full text-left rounded-lg p-2 text-xs transition-colors", 
-                                              cancelReason === r ? "bg-red-500/20 text-red-300 border border-red-500/40" : "text-zinc-400 hover:bg-[#1e1e2e]"
-                                            )}
-                                          >
-                                            {r}
-                                          </button>
-                                        ))}
-                                      </div>
-                                      <input 
-                                        type="text" 
-                                        placeholder="Hoặc nhập lý do khác..." 
-                                        value={cancelReason} 
-                                        onChange={e => setCancelReason(e.target.value)} 
-                                        className="mb-3 w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] p-2 text-xs text-white outline-none focus:border-red-500" 
-                                      />
-                                      <div className="flex justify-end gap-2">
-                                        <button 
-                                          onClick={() => setCancelDropdown(null)} 
-                                          className="rounded-lg px-2.5 py-1 text-xs text-zinc-400 hover:text-white"
-                                        >
-                                          Đóng
-                                        </button>
-                                        <button 
-                                          onClick={() => updateOrderStatus(order.id, 'cancelled', cancelReason || 'Admin hủy đơn')} 
-                                          className="rounded-lg bg-red-500 hover:bg-red-600 px-3 py-1 text-xs font-bold text-white shadow-md"
-                                        >
-                                          Xác nhận Hủy
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
+                                {/* Nút Xóa vĩnh viễn khỏi Database */}
+                                <button
+                                  onClick={() => handlePermanentDelete(order.id)}
+                                  disabled={deletingId === order.id}
+                                  title="Xóa vĩnh viễn đơn hàng và tin nhắn ticket khỏi cơ sở dữ liệu"
+                                  className="flex items-center gap-1.5 rounded-lg bg-red-500/20 border border-red-500/50 hover:bg-red-500 hover:text-white px-2.5 py-1.5 text-xs font-bold text-red-400 transition-all shadow-[0_0_12px_rgba(239,68,68,0.2)] disabled:opacity-50"
+                                >
+                                  <Trash2 size={13} />
+                                  <span>{deletingId === order.id ? "Đang xóa..." : "Xóa Hẳn"}</span>
+                                </button>
                               </>
-                            )}
-
-                            {/* Nút XÓA ĐƠN:
-                                BẮT BUỘC ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY MỚI ĐƯỢC XÓA!
-                                Nếu đơn đã hoàn thành hoặc đã hủy -> nút ĐỎ XÓA VĨNH VIỄN
-                                Nếu đơn đang xử lý (pending / paid_waiting) -> nút mờ, click báo phải hoàn thành hoặc hủy trước */}
-                            {(order.status === 'cancelled' || order.status === 'completed') ? (
-                              <button
-                                onClick={() => handleDeleteOrder(order.id, order.status)}
-                                disabled={deletingId === order.id}
-                                title="Xóa vĩnh viễn đơn hàng này khỏi hệ thống"
-                                className="flex items-center gap-1 rounded-lg bg-red-500/20 border border-red-500/50 hover:bg-red-500 hover:text-white px-2.5 py-1.5 text-xs font-bold text-red-400 transition-all shadow-[0_0_12px_rgba(239,68,68,0.2)] disabled:opacity-50"
-                              >
-                                <Trash2 size={13} />
-                                <span>{deletingId === order.id ? "Đang xóa..." : "Xóa Đơn"}</span>
-                              </button>
                             ) : (
-                              <button
-                                onClick={() => alert('⚠️ CHỈ ĐƯỢC XÓA ĐƠN KHI ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY!\nĐơn hàng này đang chờ xử lý. Vui lòng bấm [ĐÃ MUA AH] để hoàn thành hoặc bấm [Hủy] trước khi xóa.')}
-                                title="Chỉ được xóa khi đơn đã hoàn thành hoặc đã hủy"
-                                className="flex items-center gap-1 rounded-lg bg-zinc-800/40 border border-zinc-700/20 px-2 py-1.5 text-xs text-zinc-600 cursor-not-allowed opacity-50 hover:opacity-90 transition-opacity"
-                              >
-                                <Trash2 size={13} />
-                                <span className="hidden sm:inline">Xóa</span>
-                              </button>
+                              <>
+                                {(order.status === 'pending' || order.status === 'paid_waiting') && (
+                                  <>
+                                    {/* Nút Xác nhận đã mua AH */}
+                                    <button 
+                                      onClick={() => updateOrderStatus(order.id, 'completed')} 
+                                      title="Admin vào game mua món đồ /ah của khách xong bấm nút này" 
+                                      className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-bold text-[#0a0a0f] transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                    >
+                                      <Check size={14} /> 
+                                      <span>ĐÃ MUA AH</span>
+                                    </button>
+
+                                    {/* Nút Hủy Đơn */}
+                                    <div className="relative">
+                                      <button 
+                                        onClick={() => setCancelDropdown(cancelDropdown === order.id ? null : order.id)} 
+                                        title="Hủy đơn hàng" 
+                                        className="flex items-center gap-1 rounded-lg bg-red-500/10 border border-red-500/30 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+                                      >
+                                        <X size={14} /> 
+                                        <span>Hủy</span>
+                                      </button>
+                                      
+                                      {/* Cancel Dropdown Modal */}
+                                      {cancelDropdown === order.id && (
+                                        <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-[#1e1e2e] bg-[#12121a] p-3 shadow-2xl z-20 text-left">
+                                          <p className="mb-2 text-xs font-bold text-zinc-300">Chọn lý do hủy đơn:</p>
+                                          <div className="space-y-1 mb-2">
+                                            {cancelReasonsList.map(r => (
+                                              <button 
+                                                key={r} 
+                                                onClick={() => setCancelReason(r)} 
+                                                className={cn(
+                                                  "block w-full text-left rounded-lg p-2 text-xs transition-colors", 
+                                                  cancelReason === r ? "bg-red-500/20 text-red-300 border border-red-500/40" : "text-zinc-400 hover:bg-[#1e1e2e]"
+                                                )}
+                                              >
+                                                {r}
+                                              </button>
+                                            ))}
+                                          </div>
+                                          <input 
+                                            type="text" 
+                                            placeholder="Hoặc nhập lý do khác..." 
+                                            value={cancelReason} 
+                                            onChange={e => setCancelReason(e.target.value)} 
+                                            className="mb-3 w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] p-2 text-xs text-white outline-none focus:border-red-500" 
+                                          />
+                                          <div className="flex justify-end gap-2">
+                                            <button 
+                                              onClick={() => setCancelDropdown(null)} 
+                                              className="rounded-lg px-2.5 py-1 text-xs text-zinc-400 hover:text-white"
+                                            >
+                                              Đóng
+                                            </button>
+                                            <button 
+                                              onClick={() => updateOrderStatus(order.id, 'cancelled', cancelReason || 'Admin hủy đơn')} 
+                                              className="rounded-lg bg-red-500 hover:bg-red-600 px-3 py-1 text-xs font-bold text-white shadow-md"
+                                            >
+                                              Xác nhận Hủy
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* Nút XÓA ĐƠN:
+                                    BẮT BUỘC ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY MỚI ĐƯỢC XÓA!
+                                    Nếu đơn đã hoàn thành hoặc đã hủy -> nút ĐỎ XÓA VĨNH VIỄN
+                                    Nếu đơn đang xử lý (pending / paid_waiting) -> nút mờ, click báo phải hoàn thành hoặc hủy trước */}
+                                {(order.status === 'cancelled' || order.status === 'completed') ? (
+                                  <button
+                                    onClick={() => handleDeleteOrder(order.id, order.status)}
+                                    disabled={deletingId === order.id}
+                                    title="Xóa đơn hàng này khỏi giao diện Admin (Khách vẫn giữ lịch sử)"
+                                    className="flex items-center gap-1 rounded-lg bg-red-500/20 border border-red-500/50 hover:bg-red-500 hover:text-white px-2.5 py-1.5 text-xs font-bold text-red-400 transition-all shadow-[0_0_12px_rgba(239,68,68,0.2)] disabled:opacity-50"
+                                  >
+                                    <Trash2 size={13} />
+                                    <span>{deletingId === order.id ? "Đang xóa..." : "Xóa Đơn"}</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => alert('⚠️ CHỈ ĐƯỢC XÓA ĐƠN KHI ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY!\nĐơn hàng này đang chờ xử lý. Vui lòng bấm [ĐÃ MUA AH] để hoàn thành hoặc bấm [Hủy] trước khi xóa.')}
+                                    title="Chỉ được xóa khi đơn đã hoàn thành hoặc đã hủy"
+                                    className="flex items-center gap-1 rounded-lg bg-zinc-800/40 border border-zinc-700/20 px-2 py-1.5 text-xs text-zinc-600 cursor-not-allowed opacity-50 hover:opacity-90 transition-opacity"
+                                  >
+                                    <Trash2 size={13} />
+                                    <span className="hidden sm:inline">Xóa</span>
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
