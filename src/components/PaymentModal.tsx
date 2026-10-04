@@ -178,7 +178,7 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket }:
                   📸 BẮT BUỘC PHẢI CÓ ẢNH CHỤP THANH TOÁN ĐỂ ĐƯỢC HỖ TRỢ:
                 </p>
                 <p className="text-zinc-300 leading-relaxed">
-                  Sau khi chuyển tiền, <strong>quý khách vui lòng CHỤP LẠI MÀN HÌNH giao dịch chuyển khoản thành công</strong> để làm bằng chứng. Nếu gặp lỗi, delay hoặc có bất kỳ sự cố gì xảy ra, <strong>bắt buộc phải gửi ảnh chụp thanh toán</strong> thì Admin mới có thể đối soát và hỗ trợ giải quyết cho bạn! Bạn có thể bấm nút <strong>"Mở Ticket Hỗ Trợ"</strong> bên dưới để nhắn tin trực tiếp với Admin.
+                  Sau khi chuyển tiền, <strong>quý khách vui lòng CHỤP LẠI MÀN HÌNH giao dịch chuyển khoản thành công</strong> để làm bằng chứng. Nếu gặp lỗi, delay hoặc có bất kỳ sự cố gì xảy ra, <strong>bắt buộc phải gửi ảnh chụp thanh toán</strong> thì Admin mới có thể đối soát và hỗ trợ giải quyết cho bạn! Bạn có thể bấm nút <strong>&ldquo;Mở Ticket Hỗ Trợ&rdquo;</strong> bên dưới để nhắn tin trực tiếp với Admin.
                 </p>
               </div>
             </div>
