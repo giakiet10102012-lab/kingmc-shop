@@ -147,7 +147,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Chưa cấu hình Supabase URL hoặc Key trên Vercel.' }, { status: 500 });
     }
 
-    // 1. Kiểm tra đơn hàng hiện tại: BẮT BUỘC phải là 'cancelled' mới được phép xóa!
+    // 1. Kiểm tra đơn hàng hiện tại: BẮT BUỘC phải là 'cancelled' hoặc 'completed' mới được phép xóa!
     const { data: existingOrder, error: fetchErr } = await supabase
       .from('orders')
       .select('status')
@@ -158,9 +158,9 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Không tìm thấy đơn hàng cần xóa' }, { status: 404 });
     }
 
-    if (existingOrder.status !== 'cancelled') {
+    if (existingOrder.status !== 'cancelled' && existingOrder.status !== 'completed') {
       return NextResponse.json({ 
-        error: 'Chỉ có thể xóa đơn hàng khi đã ở trạng thái ĐÃ HỦY! Vui lòng hủy đơn trước khi xóa.' 
+        error: 'Chỉ có thể xóa đơn hàng khi đã HOÀN THÀNH hoặc ĐÃ HỦY! Vui lòng hoàn thành hoặc hủy đơn trước khi xóa.' 
       }, { status: 400 });
     }
 

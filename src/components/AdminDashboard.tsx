@@ -195,10 +195,10 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     }
   };
 
-  // Delete order (BẮT BUỘC ĐÃ HỦY MỚI ĐƯỢC XÓA)
+  // Delete order (BẮT BUỘC ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY MỚI ĐƯỢC XÓA)
   const handleDeleteOrder = async (id: string, status: string) => {
-    if (status !== 'cancelled') {
-      alert('⚠️ BẮT BUỘC PHẢI HỦY ĐƠN TRƯỚC KHI XÓA!\nVui lòng bấm HỦY đơn này trước rồi mới có thể xóa vĩnh viễn.');
+    if (status !== 'cancelled' && status !== 'completed') {
+      alert('⚠️ CHỈ ĐƯỢC XÓA ĐƠN KHI ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY!\nĐơn hàng này đang xử lý (Chờ mua AH / Chờ thanh toán). Vui lòng hoàn thành hoặc hủy đơn trước khi xóa.');
       return;
     }
 
@@ -863,10 +863,10 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                             )}
 
                             {/* Nút XÓA ĐƠN:
-                                BẮT BUỘC ĐÃ HỦY MỚI ĐƯỢC XÓA!
-                                Nếu đơn đã hủy -> nút ĐỎ XÓA VĨNH VIỄN
-                                Nếu đơn chưa hủy -> nút mờ, click báo phải hủy trước */}
-                            {order.status === 'cancelled' ? (
+                                BẮT BUỘC ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY MỚI ĐƯỢC XÓA!
+                                Nếu đơn đã hoàn thành hoặc đã hủy -> nút ĐỎ XÓA VĨNH VIỄN
+                                Nếu đơn đang xử lý (pending / paid_waiting) -> nút mờ, click báo phải hoàn thành hoặc hủy trước */}
+                            {(order.status === 'cancelled' || order.status === 'completed') ? (
                               <button
                                 onClick={() => handleDeleteOrder(order.id, order.status)}
                                 disabled={deletingId === order.id}
@@ -878,8 +878,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                               </button>
                             ) : (
                               <button
-                                onClick={() => alert('⚠️ BẮT BUỘC PHẢI HỦY ĐƠN TRƯỚC KHI XÓA!\nĐơn hàng này chưa ở trạng thái ĐÃ HỦY. Vui lòng bấm Hủy đơn trước khi thực hiện thao tác xóa.')}
-                                title="Bắt buộc phải hủy đơn trước khi xóa"
+                                onClick={() => alert('⚠️ CHỈ ĐƯỢC XÓA ĐƠN KHI ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY!\nĐơn hàng này đang chờ xử lý. Vui lòng bấm [ĐÃ MUA AH] để hoàn thành hoặc bấm [Hủy] trước khi xóa.')}
+                                title="Chỉ được xóa khi đơn đã hoàn thành hoặc đã hủy"
                                 className="flex items-center gap-1 rounded-lg bg-zinc-800/40 border border-zinc-700/20 px-2 py-1.5 text-xs text-zinc-600 cursor-not-allowed opacity-50 hover:opacity-90 transition-opacity"
                               >
                                 <Trash2 size={13} />
