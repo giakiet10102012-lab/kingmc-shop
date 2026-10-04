@@ -53,7 +53,7 @@ function OrderTrackingContent() {
     }
 
     loadData();
-  }, [orderId]);
+  }, [orderId, router]);
 
   if (loading) {
     return (

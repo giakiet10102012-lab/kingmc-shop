@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Crown, Zap, History, User, LogIn, LogOut } from "lucide-react";
+import { Crown, Zap, History, User, LogIn, LogOut, MessageSquare } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 
 interface HeaderProps {
