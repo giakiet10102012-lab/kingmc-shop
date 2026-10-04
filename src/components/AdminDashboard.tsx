@@ -906,6 +906,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
               </div>
             </div>
           </div>
+        )}
+
         {/* Modal Ticket Chat cho Admin */}
         {ticketOrder && (
           <OrderTicketModal

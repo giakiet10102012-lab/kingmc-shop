@@ -73,4 +73,8 @@ CREATE POLICY "Cho phép xem tin nhắn" ON order_messages FOR SELECT USING (tru
 DROP POLICY IF EXISTS "Cho phép gửi tin nhắn" ON order_messages;
 CREATE POLICY "Cho phép gửi tin nhắn" ON order_messages FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Cho phép xóa tin nhắn" ON order_messages;
+CREATE POLICY "Cho phép xóa tin nhắn" ON order_messages FOR DELETE USING (true);
+
 ALTER PUBLICATION supabase_realtime ADD TABLE order_messages;
+
