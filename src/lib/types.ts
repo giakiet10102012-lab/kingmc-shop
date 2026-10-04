@@ -9,6 +9,7 @@ export interface Order {
   status: OrderStatus;
   cancel_reason: string | null;
   created_at: string;
+  hidden_from_admin?: boolean;
 }
 
 export interface AppConfig {

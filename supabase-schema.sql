@@ -7,8 +7,12 @@ CREATE TABLE IF NOT EXISTS orders (
     total_vnd NUMERIC NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid_waiting', 'completed', 'cancelled')),
     cancel_reason TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    hidden_from_admin BOOLEAN DEFAULT false
 );
+
+-- Thêm cột hidden_from_admin nếu bảng đã tồn tại từ trước
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS hidden_from_admin BOOLEAN DEFAULT false;
 
 -- Tạo bảng app_configs (Lưu trữ cấu hình của shop)
 CREATE TABLE IF NOT EXISTS app_configs (

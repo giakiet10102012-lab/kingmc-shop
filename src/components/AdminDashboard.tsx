@@ -79,8 +79,17 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     try {
       const res = await fetch('/api/orders?status=all', { headers: { 'x-admin-pin': pin } });
       if (res.ok) {
-        const data = await res.json();
-        setOrders(data);
+        const data: Order[] = await res.json();
+        let hiddenLocal: string[] = [];
+        if (typeof window !== 'undefined') {
+          try {
+            hiddenLocal = JSON.parse(localStorage.getItem('kingmc_admin_hidden_orders') || '[]');
+          } catch {}
+        }
+        const filtered = Array.isArray(data) 
+          ? data.filter(o => !o.hidden_from_admin && !hiddenLocal.includes(o.id)) 
+          : [];
+        setOrders(filtered);
       }
     } catch (e) {
       console.error('Fetch orders error:', e);
@@ -195,14 +204,18 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     }
   };
 
-  // Delete order (BẮT BUỘC ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY MỚI ĐƯỢC XÓA)
+  // Delete order (XÓA KHỎI BẢNG ADMIN - KHÁCH VẪN XEM ĐƯỢC LỊCH SỬ)
   const handleDeleteOrder = async (id: string, status: string) => {
     if (status !== 'cancelled' && status !== 'completed') {
       alert('⚠️ CHỈ ĐƯỢC XÓA ĐƠN KHI ĐÃ HOÀN THÀNH HOẶC ĐÃ HỦY!\nĐơn hàng này đang xử lý (Chờ mua AH / Chờ thanh toán). Vui lòng hoàn thành hoặc hủy đơn trước khi xóa.');
       return;
     }
 
-    const confirmed = window.confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN đơn hàng #${id}?\nThao tác này sẽ xóa đơn và toàn bộ tin nhắn ticket liên quan khỏi hệ thống.`);
+    const confirmed = window.confirm(
+      `Bạn có chắc chắn muốn XÓA ĐƠN HÀNG #${id} KHỎI BẢNG ADMIN?\n\n` +
+      `• Đơn sẽ được dọn dẹp biến mất khỏi màn hình Admin (giúp bạn không bị rối mắt khi có quá nhiều đơn).\n` +
+      `• KHÁCH HÀNG (MEMBER) VẪN XEM ĐƯỢC 100% trong Lịch Sử Mua của họ.`
+    );
     if (!confirmed) return;
 
     setDeletingId(id);
@@ -216,8 +229,18 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
 
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        if (typeof window !== 'undefined') {
+          try {
+            const currentHidden = JSON.parse(localStorage.getItem('kingmc_admin_hidden_orders') || '[]');
+            if (!currentHidden.includes(id)) {
+              currentHidden.push(id);
+              localStorage.setItem('kingmc_admin_hidden_orders', JSON.stringify(currentHidden));
+            }
+          } catch {}
+        }
+
         setOrders(prev => prev.filter(o => o.id !== id));
-        alert('Đã xóa vĩnh viễn đơn hàng thành công!');
+        alert('Đã xóa đơn khỏi giao diện Admin thành công!\n(Khách hàng vẫn xem được trong Lịch Sử Mua của họ)');
       } else {
         alert(data.error || 'Lỗi khi xóa đơn hàng');
       }
