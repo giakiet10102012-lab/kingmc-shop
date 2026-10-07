@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Crown, Zap, History, User, LogIn, LogOut, MessageSquare } from "lucide-react";
-import { formatVND } from "@/lib/utils";
+import { Crown, Zap, History, User, LogIn, LogOut, MessageSquare, Boxes } from "lucide-react";
+import { formatVND, formatNumber } from "@/lib/utils";
 
 interface HeaderProps {
   rate: number;
+  stock?: number;
   user?: any;
   onOpenAuth?: () => void;
   onOpenHistory?: () => void;
@@ -15,6 +16,7 @@ interface HeaderProps {
 
 export default function Header({ 
   rate, 
+  stock,
   user, 
   onOpenAuth, 
   onOpenHistory, 
@@ -47,7 +49,15 @@ export default function Header({
           <div className="hidden md:flex items-center gap-2 bg-[#12121a] border border-emerald-500/40 px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.1)]">
             <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
             <span className="text-xs font-semibold text-zinc-300">
-              Tỷ giá: <strong className="text-emerald-400">{rate ? formatVND(rate) : "10,000đ"} / 1M</strong>
+              Tỷ giá: <strong className="text-emerald-400">{formatVND(rate ?? 0)} / 1M</strong>
+            </span>
+          </div>
+
+          {/* Live Stock Badge (Desktop & Tablet) */}
+          <div className="hidden sm:flex items-center gap-2 bg-[#12121a] border border-amber-500/40 px-3 py-1.5 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+            <Boxes className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-xs font-semibold text-zinc-300">
+              Kho: <strong className="text-amber-400">{formatNumber(stock !== undefined ? stock : 1000)}M</strong>
             </span>
           </div>
 

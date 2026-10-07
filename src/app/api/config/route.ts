@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { ShopSettings } from '@/lib/types';
 
 const DEFAULT_SETTINGS: ShopSettings = {
-  rate_per_m: 10000,
+  rate_per_m: 0,
   bank_name: 'MB Bank',
   bank_id: 'MB',
   bank_account: '0123456789',
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
         const settings: ShopSettings = { ...memorySettings };
         data.forEach((row: any) => {
           if (row.key === 'rate_per_m') {
-            settings.rate_per_m = Number(row.value) || settings.rate_per_m;
+            settings.rate_per_m = row.value !== undefined && !isNaN(Number(row.value)) ? Number(row.value) : settings.rate_per_m;
           } else if (row.key === 'is_active') {
             settings.is_active = row.value !== 'false';
           } else if (row.key === 'money_stock') {

@@ -53,7 +53,7 @@ const POPULAR_BANKS = [
 export default function AdminDashboard({ pin }: AdminDashboardProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [settings, setSettings] = useState<ShopSettings>({
-    rate_per_m: 10000,
+    rate_per_m: 0,
     bank_name: 'MB Bank',
     bank_id: 'MB',
     bank_account: '0123456789',

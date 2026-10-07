@@ -21,7 +21,7 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
   const [error, setError] = useState<string | null>(null);
 
   const parsedMoney = typeof moneyM === "number" ? moneyM : 0;
-  const currentRate = settings.rate_per_m || 10000;
+  const currentRate = settings.rate_per_m !== undefined ? settings.rate_per_m : 0;
   const totalVND = parsedMoney * currentRate;
 
   // Quản lý kho Money (Stock)
@@ -117,26 +117,55 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
             </div>
           </div>
 
-          <div className="flex flex-col items-end gap-1">
-            <div className="text-right">
-              <span className="text-[10px] text-zinc-500 block uppercase tracking-wider">Tỷ giá</span>
-              <span className="text-xs font-bold text-emerald-400">{formatVND(currentRate)} / 1M</span>
-            </div>
+          <div className="text-right">
+            <span className="text-[10px] text-zinc-500 block uppercase tracking-wider font-semibold">Tỷ giá</span>
+            <span className="text-sm font-black text-emerald-400">{formatVND(currentRate)} / 1M</span>
+          </div>
+        </div>
 
-            {/* Hiển thị Kho Money (Stock) */}
-            <div className="flex items-center gap-1.5 text-[11px] font-medium">
-              <Boxes size={12} className={isOutOfStock ? "text-red-400" : stock < 100 ? "text-amber-400" : "text-emerald-400"} />
-              <span className="text-zinc-400">Kho còn:</span>
-              <span className={cn(
-                "font-bold font-mono px-1.5 py-0.5 rounded text-[10px]",
-                isOutOfStock 
-                  ? "bg-red-500/20 text-red-400 border border-red-500/30" 
-                  : stock < 100 
-                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" 
-                  : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              )}>
-                {isOutOfStock ? "TẠM HẾT" : `${formatNumber(stock)}M`}
+        {/* KHO MONEY STOCK BANNER - TO, RÕ RÀNG, DỄ NHÌN */}
+        <div className={cn(
+          "rounded-2xl border p-3.5 sm:p-4 flex items-center justify-between gap-4 transition-all shadow-md",
+          isOutOfStock 
+            ? "border-red-500/40 bg-red-500/10" 
+            : stock < 100 
+            ? "border-amber-500/40 bg-amber-500/10" 
+            : "border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-[#161622] to-amber-500/5 shadow-[0_0_25px_rgba(245,158,11,0.1)]"
+        )}>
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-2xl border shrink-0",
+              isOutOfStock 
+                ? "bg-red-500/20 border-red-500/40 text-red-400" 
+                : "bg-amber-500/20 border-amber-500/40 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+            )}>
+              <Boxes size={22} className={isOutOfStock ? "" : "animate-pulse"} />
+            </div>
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-zinc-200 block flex items-center gap-1.5">
+                <span>KHO MONEY CÒN LẠI</span>
+                <span className={cn(
+                  "px-2 py-0.2 rounded-full text-[10px] font-bold uppercase",
+                  isOutOfStock ? "bg-red-500/20 text-red-400 border border-red-500/30" : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                )}>
+                  {isOutOfStock ? "HẾT HÀNG" : "CÒN HÀNG"}
+                </span>
               </span>
+              <span className="text-[11px] sm:text-xs text-zinc-400">
+                {isOutOfStock ? "Shop tạm hết Money để giao dịch" : "Nguồn Money sạch 100%, sẵn sàng nạp"}
+              </span>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <div className="flex items-baseline justify-end gap-1">
+              <span className={cn(
+                "text-2xl sm:text-3xl font-black font-mono tracking-tight",
+                isOutOfStock ? "text-red-400" : "text-amber-400 drop-shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+              )}>
+                {isOutOfStock ? "0" : formatNumber(stock)}
+              </span>
+              <span className="text-base sm:text-lg font-black text-amber-300">M</span>
             </div>
           </div>
         </div>

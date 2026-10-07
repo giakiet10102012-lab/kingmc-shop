@@ -8,19 +8,20 @@ import AuthModal from "@/components/AuthModal";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
 import OrderTicketModal from "@/components/OrderTicketModal";
 import type { ShopSettings, Order } from "@/lib/types";
-import { formatVND } from "@/lib/utils";
+import { formatVND, formatNumber } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import { Zap, ShieldCheck, Clock, CheckCircle2, BellRing, AlertCircle, MessageSquare } from "lucide-react";
+import { Zap, ShieldCheck, Clock, CheckCircle2, BellRing, AlertCircle, MessageSquare, Boxes, Coins } from "lucide-react";
 
 export default function Home() {
   const [shopSettings, setShopSettings] = useState<ShopSettings>({
-    rate_per_m: 10000,
+    rate_per_m: 0,
     bank_name: 'MB Bank',
     bank_id: 'MB',
     bank_account: '0123456789',
     bank_owner: 'NGUYEN VAN A',
     shop_notice: '',
-    is_active: true
+    is_active: true,
+    money_stock: 1000
   });
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,6 +118,7 @@ export default function Home() {
     <>
       <Header 
         rate={shopSettings.rate_per_m} 
+        stock={shopSettings.money_stock}
         user={user}
         onOpenAuth={() => setShowAuthModal(true)}
         onOpenHistory={() => setShowHistoryModal(true)}
@@ -165,21 +167,70 @@ export default function Home() {
             </div>
           )}
 
-          {/* GIANT EXCHANGE RATE DISPLAY BANNER FOR MONEY */}
-          <div className="w-full max-w-xl mx-auto rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-b from-[#161622] to-[#0f0f18] p-5 sm:p-6 shadow-[0_0_30px_rgba(16,185,129,0.15)] text-center relative overflow-hidden group">
-            <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-emerald-500/10 blur-xl"></div>
-            
-            <p className="text-xs uppercase tracking-widest font-bold text-zinc-400 mb-1 flex items-center justify-center gap-1.5">
-              <Zap size={15} className="text-emerald-400 fill-emerald-400" />
-              <span>BẢNG TỶ GIÁ NIÊM YẾT HÔM NAY</span>
-            </p>
+          {/* GIANT EXCHANGE RATE & STOCK DISPLAY BANNER */}
+          <div className="w-full max-w-xl mx-auto rounded-3xl border-2 border-emerald-500/40 bg-gradient-to-b from-[#161622] to-[#0f0f18] p-5 sm:p-6 shadow-[0_0_35px_rgba(16,185,129,0.15)] relative overflow-hidden group">
+            <div className="absolute top-0 right-0 -mt-6 -mr-6 h-32 w-32 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none"></div>
+            <div className="absolute bottom-0 left-0 -mb-6 -ml-6 h-32 w-32 rounded-full bg-amber-500/10 blur-2xl pointer-events-none"></div>
 
-            <div className="my-2 flex items-baseline justify-center gap-2">
-              <span className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight">1M</span>
-              <span className="text-xl sm:text-2xl font-bold text-zinc-400">=</span>
-              <span className="text-3xl sm:text-4xl md:text-5xl font-black text-emerald-400 tracking-tight drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]">
-                {formatVND(shopSettings.rate_per_m)}
-              </span>
+            {/* Top Status Header */}
+            <div className="flex items-center justify-between border-b border-[#1e1e2e] pb-3 mb-4">
+              <div className="flex items-center gap-1.5 text-xs uppercase tracking-widest font-bold text-zinc-400">
+                <Zap size={14} className="text-emerald-400 fill-emerald-400" />
+                <span>BẢNG NIÊM YẾT HÔM NAY</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className="text-emerald-400">Trực Tuyến 24/7</span>
+              </div>
+            </div>
+
+            {/* 2 Big Highlight Columns: Rate & Stock */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 my-2">
+              {/* Box 1: Tỷ Giá */}
+              <div className="rounded-2xl border border-emerald-500/30 bg-[#0e0e16]/80 p-4 text-center flex flex-col justify-center items-center relative overflow-hidden group-hover:border-emerald-500/50 transition-colors">
+                <span className="text-[11px] uppercase tracking-wider font-bold text-zinc-400 mb-1 flex items-center gap-1">
+                  <Coins size={14} className="text-emerald-400" /> Tỷ Giá Niêm Yết
+                </span>
+                <div className="my-1.5 flex items-baseline justify-center gap-1.5">
+                  <span className="text-2xl sm:text-3xl font-black text-white">1M</span>
+                  <span className="text-lg font-bold text-zinc-500">=</span>
+                  <span className="text-2xl sm:text-3xl font-black text-emerald-400 drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                    {formatVND(shopSettings.rate_per_m ?? 0)}
+                  </span>
+                </div>
+                <span className="text-[10px] text-zinc-500 font-medium">Mua tự động sàn /ah</span>
+              </div>
+
+              {/* Box 2: KHO MONEY (STOCK) - TO, RÕ RÀNG, DỄ NHÌN */}
+              <div className="rounded-2xl border border-amber-500/30 bg-[#0e0e16]/80 p-4 text-center flex flex-col justify-center items-center relative overflow-hidden shadow-[0_0_20px_rgba(245,158,11,0.08)] group-hover:border-amber-500/50 transition-colors">
+                <span className="text-[11px] uppercase tracking-wider font-bold text-amber-400 mb-1 flex items-center gap-1">
+                  <Boxes size={15} className="text-amber-400 animate-pulse" /> KHO MONEY SẴN CÓ
+                </span>
+                <div className="my-1.5 flex items-baseline justify-center gap-1">
+                  <span className="text-3xl sm:text-4xl font-black text-amber-400 drop-shadow-[0_0_18px_rgba(245,158,11,0.4)] font-mono">
+                    {formatNumber(shopSettings.money_stock !== undefined ? shopSettings.money_stock : 1000)}
+                  </span>
+                  <span className="text-xl sm:text-2xl font-black text-amber-300">M</span>
+                </div>
+                <div>
+                  {(shopSettings.money_stock !== undefined ? shopSettings.money_stock : 1000) <= 0 ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                      🔴 TẠM HẾT HÀNG
+                    </span>
+                  ) : (shopSettings.money_stock !== undefined ? shopSettings.money_stock : 1000) < 100 ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      🟡 SẮP HẾT HÀNG
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      🟢 SẴN SÀNG GIAO DỊCH
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* 3 Key Trust Highlights */}
