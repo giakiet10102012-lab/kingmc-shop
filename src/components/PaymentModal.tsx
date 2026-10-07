@@ -216,10 +216,10 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket }:
               {success ? (
                 <>
                   <CheckCircle2 className="w-5 h-5" />
-                  ĐÃ XÁC NHẬN!
+                  ĐÃ XÁC NHẬN THANH TOÁN!
                 </>
               ) : (
-                "Tôi Đã Chuyển Khoản ✓"
+                "Xác Nhận Đã Thanh Toán ✓"
               )}
             </button>
           </div>

@@ -221,6 +221,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
         setCancelDropdown(null);
         setCancelReason('');
         fetchOrders();
+        fetchSettings();
       }
     } catch (e) {
       console.error('Update order status error:', e);
@@ -344,31 +345,30 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     }));
   };
 
-  // Financial Stats (Tính tổng tích lũy kể cả các đơn đã dọn dẹp)
+  // Financial Stats (Tính tổng tích lũy kể cả các đơn đã dọn dẹp, chỉ tính các đơn đã xác nhận)
   const stats = useMemo(() => {
+    const validOrders = orders.filter(o => o.status !== 'pending');
     const allCompleted = [...orders, ...hiddenOrders].filter(o => o.status === 'completed');
     const totalRevenue = allCompleted.reduce((acc, curr) => acc + (Number(curr.total_vnd) || 0), 0);
     const totalM = allCompleted.reduce((acc, curr) => acc + (Number(curr.money_m) || 0), 0);
 
     return {
-      total: orders.length,
-      waitingAdmin: orders.filter(o => o.status === 'paid_waiting').length,
-      pending: orders.filter(o => o.status === 'pending').length,
-      completed: orders.filter(o => o.status === 'completed').length,
-      cancelled: orders.filter(o => o.status === 'cancelled').length,
-      hidden: hiddenOrders.length,
+      total: validOrders.length,
+      waitingAdmin: validOrders.filter(o => o.status === 'paid_waiting').length,
+      completed: validOrders.filter(o => o.status === 'completed').length,
+      cancelled: validOrders.filter(o => o.status === 'cancelled').length,
+      hidden: hiddenOrders.filter(o => o.status !== 'pending').length,
       totalRevenue,
       totalM
     };
   }, [orders, hiddenOrders]);
 
-  // Filtered orders
+  // Filtered orders (CHỈ HIỂN THỊ ĐƠN HÀNG KHI ĐÃ NHẤN XÁC NHẬN THANH TOÁN: status !== 'pending')
   const filteredOrders = useMemo(() => {
-    const listToFilter = activeTab === 'hidden' ? hiddenOrders : orders;
+    const listToFilter = (activeTab === 'hidden' ? hiddenOrders : orders).filter(o => o.status !== 'pending');
     return listToFilter.filter(o => {
       // Tab filter
       if (activeTab === 'paid_waiting' && o.status !== 'paid_waiting') return false;
-      if (activeTab === 'pending' && o.status !== 'pending') return false;
       if (activeTab === 'completed' && o.status !== 'completed') return false;
       if (activeTab === 'cancelled' && o.status !== 'cancelled') return false;
 
@@ -821,13 +821,15 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                 <p className="text-[11px] text-amber-500/80 font-medium">Cần duyệt ngay</p>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 sm:p-5">
-                <div className="flex items-center justify-between text-zinc-400">
-                  <span className="text-xs font-medium">Chờ Chuyển</span>
-                  <Clock size={18} />
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 sm:p-5">
+                <div className="flex items-center justify-between text-amber-400">
+                  <span className="text-xs font-medium">Kho Money Shop</span>
+                  <Boxes size={18} />
                 </div>
-                <p className="mt-2 text-lg sm:text-xl font-black text-zinc-200">{stats.pending}</p>
-                <p className="text-[11px] text-zinc-500">Khách chưa chuyển</p>
+                <p className="mt-2 text-lg sm:text-xl font-black text-amber-400 font-mono">
+                  {formatNumber(settings.money_stock !== undefined ? settings.money_stock : 1000)} M
+                </p>
+                <p className="text-[11px] text-zinc-500">Số lượng sẵn sàng nạp</p>
               </div>
 
               <div className="rounded-2xl border border-emerald-500/20 bg-zinc-900/50 p-4 sm:p-5">
@@ -845,7 +847,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                   <XCircle size={18} />
                 </div>
                 <p className="mt-2 text-lg sm:text-xl font-black text-zinc-200">{stats.cancelled}</p>
-                <p className="text-[11px] text-zinc-500">Đơn bị hủy</p>
+                <p className="text-[11px] text-zinc-500">Đơn bị hủy (đã hoàn kho)</p>
               </div>
             </div>
 
@@ -857,7 +859,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                     <span>Danh Sách Đơn Hàng</span>
                     <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400">{filteredOrders.length}</span>
                   </h2>
-                  <p className="text-xs text-zinc-400">Tự động cập nhật thời gian thực khi khách tạo đơn</p>
+                  <p className="text-xs text-zinc-400">Chỉ hiển thị các đơn khách hàng đã nhấn xác nhận chuyển khoản</p>
                 </div>
 
                 {/* Search Input */}
@@ -873,12 +875,11 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                 </div>
               </div>
 
-              {/* Filter Tabs */}
+              {/* Filter Tabs - CHỈ HIỂN THỊ CÁC ĐƠN ĐÃ XÁC NHẬN THANH TOÁN */}
               <div className="border-b border-[#1e1e2e] px-4 py-2 flex gap-2 overflow-x-auto bg-[#0e0e16]">
                 {[
-                  { id: 'all', label: 'Tất cả', count: stats.total },
+                  { id: 'all', label: 'Tất cả (Đã xác nhận)', count: stats.total },
                   { id: 'paid_waiting', label: '⚡ Chờ Mua AH', count: stats.waitingAdmin, highlight: true },
-                  { id: 'pending', label: 'Chờ thanh toán', count: stats.pending },
                   { id: 'completed', label: 'Đã hoàn thành', count: stats.completed },
                   { id: 'cancelled', label: 'Đã hủy', count: stats.cancelled },
                   { id: 'hidden', label: '🧹 Đã Dọn Dẹp', count: stats.hidden },

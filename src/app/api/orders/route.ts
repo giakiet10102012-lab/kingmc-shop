@@ -138,14 +138,17 @@ export async function GET(req: Request) {
         }
       } catch {}
 
+      // YÊU CẦU: Chỉ hiển thị đơn hàng khi khách đã nhấn xác nhận thanh toán (status !== 'pending')!
+      const confirmedOrders = data.filter((o: any) => o.status !== 'pending');
+
       // Nếu Admin yêu cầu xem danh sách "Đã Dọn Dẹp"
       if (includeHidden || status === 'hidden') {
-        const hiddenOrders = data.filter((o: any) => o.hidden_from_admin === true || adminHiddenOrders.has(o.id));
+        const hiddenOrders = confirmedOrders.filter((o: any) => o.hidden_from_admin === true || adminHiddenOrders.has(o.id));
         return NextResponse.json(hiddenOrders);
       }
 
       // Mặc định: lọc bỏ các đơn đã dọn dẹp để admin không bị rối mắt
-      const visibleOrders = data.filter((o: any) => {
+      const visibleOrders = confirmedOrders.filter((o: any) => {
         if (o.hidden_from_admin === true) return false;
         if (adminHiddenOrders.has(o.id)) return false;
         return true;
@@ -170,7 +173,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Allow 'paid_waiting' without admin pin (e.g. from PaymentModal)
+    // Allow 'paid_waiting' without admin pin (e.g. from PaymentModal when customer confirms payment)
     if (status !== 'paid_waiting' && !checkAdmin(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -180,6 +183,92 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Chưa cấu hình Supabase URL hoặc Key trên Vercel.' }, { status: 500 });
     }
 
+    // 1. LẤY THÔNG TIN ĐƠN HÀNG HIỆN TẠI ĐỂ BIẾT TRẠNG THÁI CŨ VÀ SỐ TIỀN M
+    const { data: currentOrder, error: fetchErr } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr) throw fetchErr;
+    if (!currentOrder) {
+      return NextResponse.json({ error: 'Không tìm thấy đơn hàng' }, { status: 404 });
+    }
+
+    const orderMoneyM = Number(currentOrder.money_m) || 0;
+    const oldStatus = currentOrder.status;
+
+    // 2. QUẢN LÝ KHO (STOCK):
+    // TRƯỜNG HỢP 1: Khách bấm "Xác nhận đã thanh toán" (từ pending sang paid_waiting)
+    // -> BẮT ĐẦU TRỪ SỐ TIỀN TRONG KHO!
+    if (status === 'paid_waiting' && oldStatus === 'pending') {
+      try {
+        const { data: stockRow } = await supabase
+          .from('app_configs')
+          .select('value')
+          .eq('key', 'money_stock')
+          .maybeSingle();
+
+        const currentStock = stockRow && stockRow.value !== undefined ? Number(stockRow.value) : 1000;
+        const newStock = Math.max(0, currentStock - orderMoneyM);
+
+        await supabase.from('app_configs').upsert({
+          key: 'money_stock',
+          value: String(newStock),
+          updated_at: new Date().toISOString()
+        });
+      } catch (stockErr) {
+        console.warn('Deduct stock on confirm payment warning:', stockErr);
+      }
+    }
+
+    // TRƯỜNG HỢP 2: HỦY ĐƠN HÀNG (Admin hủy đơn chuyển sang cancelled)
+    // Nếu đơn này ĐÃ TỪNG được xác nhận thanh toán (oldStatus là paid_waiting hoặc completed)
+    // -> HOÀN LẠI SỐ TIỀN VÀO KHO!
+    if (status === 'cancelled' && (oldStatus === 'paid_waiting' || oldStatus === 'completed')) {
+      try {
+        const { data: stockRow } = await supabase
+          .from('app_configs')
+          .select('value')
+          .eq('key', 'money_stock')
+          .maybeSingle();
+
+        const currentStock = stockRow && stockRow.value !== undefined ? Number(stockRow.value) : 1000;
+        const newStock = currentStock + orderMoneyM;
+
+        await supabase.from('app_configs').upsert({
+          key: 'money_stock',
+          value: String(newStock),
+          updated_at: new Date().toISOString()
+        });
+      } catch (stockErr) {
+        console.warn('Refund stock on cancel order warning:', stockErr);
+      }
+    }
+
+    // TRƯỜNG HỢP 3: Phục hồi đơn từ Đã hủy sang Chờ mua AH hoặc Đã hoàn thành
+    if ((status === 'paid_waiting' || status === 'completed') && oldStatus === 'cancelled') {
+      try {
+        const { data: stockRow } = await supabase
+          .from('app_configs')
+          .select('value')
+          .eq('key', 'money_stock')
+          .maybeSingle();
+
+        const currentStock = stockRow && stockRow.value !== undefined ? Number(stockRow.value) : 1000;
+        const newStock = Math.max(0, currentStock - orderMoneyM);
+
+        await supabase.from('app_configs').upsert({
+          key: 'money_stock',
+          value: String(newStock),
+          updated_at: new Date().toISOString()
+        });
+      } catch (stockErr) {
+        console.warn('Deduct stock on re-activate warning:', stockErr);
+      }
+    }
+
+    // 3. CẬP NHẬT TRẠNG THÁI ĐƠN HÀNG
     const updateData: any = { status };
     if (cancel_reason !== undefined) {
       updateData.cancel_reason = cancel_reason;
