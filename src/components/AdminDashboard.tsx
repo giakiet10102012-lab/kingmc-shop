@@ -155,10 +155,14 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     fetchSettings();
 
     // Supabase Realtime subscription
-    const channel = supabase.channel('admin-orders')
+    const channel = supabase.channel('admin-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         fetchOrders();
         fetchHiddenOrders();
+        fetchSettings();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_configs' }, () => {
+        fetchSettings();
       })
       .subscribe();
 
@@ -218,6 +222,10 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
         body: JSON.stringify({ id, status, cancel_reason: reason })
       });
       if (res.ok) {
+        const resData = await res.json().catch(() => null);
+        if (resData?.current_stock !== undefined && resData.current_stock !== null && !isNaN(resData.current_stock)) {
+          setSettings(prev => ({ ...prev, money_stock: resData.current_stock }));
+        }
         setCancelDropdown(null);
         setCancelReason('');
         fetchOrders();

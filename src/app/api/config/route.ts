@@ -46,7 +46,7 @@ export async function GET(req: Request) {
           } else if (row.key === 'is_active') {
             settings.is_active = row.value !== 'false';
           } else if (row.key === 'money_stock') {
-            settings.money_stock = Number(row.value) !== undefined ? Number(row.value) : 1000;
+            settings.money_stock = row.value !== undefined && row.value !== null && !isNaN(Number(row.value)) ? Number(row.value) : 1000;
           } else {
             (settings as any)[row.key] = row.value;
           }
@@ -88,13 +88,25 @@ async function handleSaveConfig(req: Request) {
         }));
 
         if (upserts.length > 0) {
-          const { error } = await supabase.from('app_configs').upsert(upserts, { onConflict: 'key' });
-          if (error) {
-            console.warn('Supabase upsert warning:', error.message);
-            dbWarning = error.message;
-          } else {
-            dbSuccess = true;
+          for (const item of upserts) {
+            // Thử UPDATE trước để tránh xung đột
+            const { data: updData, error: updErr } = await supabase
+              .from('app_configs')
+              .update({ value: item.value, updated_at: item.updated_at })
+              .eq('key', item.key)
+              .select();
+
+            if (updErr || !updData || updData.length === 0) {
+              const { error: upsErr } = await supabase
+                .from('app_configs')
+                .upsert(item, { onConflict: 'key' });
+              if (upsErr) {
+                console.warn('Supabase upsert warning for key:', item.key, upsErr.message);
+                dbWarning = upsErr.message;
+              }
+            }
           }
+          if (!dbWarning) dbSuccess = true;
         }
       } catch (dbErr: any) {
         console.warn('Supabase save exception:', dbErr.message);

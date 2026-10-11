@@ -52,40 +52,65 @@ export default function Home() {
     setUser(null);
   };
 
-  useEffect(() => {
-    async function fetchConfig() {
-      if (typeof window !== 'undefined') {
-        const local = localStorage.getItem('kingmc_settings');
-        if (local) {
-          try {
-            const parsed = JSON.parse(local);
-            setShopSettings(prev => ({ ...prev, ...parsed }));
-          } catch {}
+  const fetchConfig = async () => {
+    try {
+      const res = await fetch("/api/config");
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data) {
+          setShopSettings(prev => {
+            const merged = { ...prev, ...data };
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('kingmc_settings', JSON.stringify(merged));
+            }
+            return merged;
+          });
         }
       }
+    } catch (err) {
+      console.error("Failed to fetch config:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      try {
-        const res = await fetch("/api/config");
-        if (res.ok) {
-          const data = await res.json().catch(() => null);
-          if (data) {
-            setShopSettings(prev => {
-              const merged = { ...prev, ...data };
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('kingmc_settings', JSON.stringify(merged));
-              }
-              return merged;
-            });
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch config:", err);
-      } finally {
-        setLoading(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const local = localStorage.getItem('kingmc_settings');
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          setShopSettings(prev => ({ ...prev, ...parsed }));
+        } catch {}
       }
     }
+
     fetchConfig();
+
+    // Supabase Realtime: Tự động cập nhật Stock & Tỷ giá ngay khi có thay đổi trong DB
+    const channel = supabase.channel('realtime:app_configs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_configs' }, () => {
+        fetchConfig();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const handlePaymentConfirmed = (updatedStock?: number) => {
+    if (updatedStock !== undefined && updatedStock !== null && !isNaN(updatedStock)) {
+      setShopSettings(prev => {
+        const merged = { ...prev, money_stock: updatedStock };
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('kingmc_settings', JSON.stringify(merged));
+        }
+        return merged;
+      });
+    }
+    fetchConfig();
+  };
 
   // Mở Ticket Hỗ Trợ chung giữa Khách và Admin
   const handleOpenGeneralSupport = () => {
@@ -281,7 +306,11 @@ export default function Home() {
         <PaymentModal 
           order={createdOrder} 
           settings={shopSettings} 
-          onClose={() => setCreatedOrder(null)} 
+          onClose={() => {
+            setCreatedOrder(null);
+            fetchConfig();
+          }} 
+          onPaymentConfirmed={handlePaymentConfirmed}
           onOpenTicket={(order) => {
             setActiveTicketOrder(order);
           }}

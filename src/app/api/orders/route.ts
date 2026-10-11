@@ -21,6 +21,48 @@ const checkAdmin = (req: Request) => {
   return pin === expectedPin;
 };
 
+async function adjustStock(supabase: any, delta: number): Promise<number | null> {
+  try {
+    const { data: stockRow } = await supabase
+      .from('app_configs')
+      .select('value')
+      .eq('key', 'money_stock')
+      .maybeSingle();
+
+    let currentStock = 1000;
+    if (stockRow && stockRow.value !== undefined && stockRow.value !== null && !isNaN(Number(stockRow.value))) {
+      currentStock = Number(stockRow.value);
+    }
+
+    const newStock = Math.max(0, currentStock + delta);
+
+    // 1. Thử cập nhật trực tiếp vào dòng key = 'money_stock'
+    const { data: updateRes, error: updateErr } = await supabase
+      .from('app_configs')
+      .update({ value: String(newStock), updated_at: new Date().toISOString() })
+      .eq('key', 'money_stock')
+      .select();
+
+    // 2. Nếu chưa có dòng nào, dùng upsert với onConflict: 'key'
+    if (updateErr || !updateRes || updateRes.length === 0) {
+      const { error: upsertErr } = await supabase
+        .from('app_configs')
+        .upsert(
+          { key: 'money_stock', value: String(newStock), updated_at: new Date().toISOString() },
+          { onConflict: 'key' }
+        );
+      if (upsertErr) {
+        console.error('adjustStock upsert error:', upsertErr);
+      }
+    }
+
+    return newStock;
+  } catch (err) {
+    console.error('adjustStock error:', err);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { ign, money_m, total_vnd, user_id } = await req.json();
@@ -198,74 +240,23 @@ export async function PATCH(req: Request) {
     const orderMoneyM = Number(currentOrder.money_m) || 0;
     const oldStatus = currentOrder.status;
 
+    let updatedStock: number | null = null;
+
     // 2. QUẢN LÝ KHO (STOCK):
-    // TRƯỜNG HỢP 1: Khách bấm "Xác nhận đã thanh toán" (từ pending sang paid_waiting)
+    // TRƯỜNG HỢP 1: Khách bấm "Xác nhận đã thanh toán" hoặc Admin duyệt (từ pending sang paid_waiting / completed)
     // -> BẮT ĐẦU TRỪ SỐ TIỀN TRONG KHO!
-    if (status === 'paid_waiting' && oldStatus === 'pending') {
-      try {
-        const { data: stockRow } = await supabase
-          .from('app_configs')
-          .select('value')
-          .eq('key', 'money_stock')
-          .maybeSingle();
-
-        const currentStock = stockRow && stockRow.value !== undefined ? Number(stockRow.value) : 1000;
-        const newStock = Math.max(0, currentStock - orderMoneyM);
-
-        await supabase.from('app_configs').upsert({
-          key: 'money_stock',
-          value: String(newStock),
-          updated_at: new Date().toISOString()
-        });
-      } catch (stockErr) {
-        console.warn('Deduct stock on confirm payment warning:', stockErr);
-      }
+    if ((status === 'paid_waiting' || status === 'completed') && oldStatus === 'pending') {
+      updatedStock = await adjustStock(supabase, -orderMoneyM);
     }
-
     // TRƯỜNG HỢP 2: HỦY ĐƠN HÀNG (Admin hủy đơn chuyển sang cancelled)
     // Nếu đơn này ĐÃ TỪNG được xác nhận thanh toán (oldStatus là paid_waiting hoặc completed)
     // -> HOÀN LẠI SỐ TIỀN VÀO KHO!
-    if (status === 'cancelled' && (oldStatus === 'paid_waiting' || oldStatus === 'completed')) {
-      try {
-        const { data: stockRow } = await supabase
-          .from('app_configs')
-          .select('value')
-          .eq('key', 'money_stock')
-          .maybeSingle();
-
-        const currentStock = stockRow && stockRow.value !== undefined ? Number(stockRow.value) : 1000;
-        const newStock = currentStock + orderMoneyM;
-
-        await supabase.from('app_configs').upsert({
-          key: 'money_stock',
-          value: String(newStock),
-          updated_at: new Date().toISOString()
-        });
-      } catch (stockErr) {
-        console.warn('Refund stock on cancel order warning:', stockErr);
-      }
+    else if (status === 'cancelled' && (oldStatus === 'paid_waiting' || oldStatus === 'completed')) {
+      updatedStock = await adjustStock(supabase, orderMoneyM);
     }
-
     // TRƯỜNG HỢP 3: Phục hồi đơn từ Đã hủy sang Chờ mua AH hoặc Đã hoàn thành
-    if ((status === 'paid_waiting' || status === 'completed') && oldStatus === 'cancelled') {
-      try {
-        const { data: stockRow } = await supabase
-          .from('app_configs')
-          .select('value')
-          .eq('key', 'money_stock')
-          .maybeSingle();
-
-        const currentStock = stockRow && stockRow.value !== undefined ? Number(stockRow.value) : 1000;
-        const newStock = Math.max(0, currentStock - orderMoneyM);
-
-        await supabase.from('app_configs').upsert({
-          key: 'money_stock',
-          value: String(newStock),
-          updated_at: new Date().toISOString()
-        });
-      } catch (stockErr) {
-        console.warn('Deduct stock on re-activate warning:', stockErr);
-      }
+    else if ((status === 'paid_waiting' || status === 'completed') && oldStatus === 'cancelled') {
+      updatedStock = await adjustStock(supabase, -orderMoneyM);
     }
 
     // 3. CẬP NHẬT TRẠNG THÁI ĐƠN HÀNG
@@ -283,7 +274,10 @@ export async function PATCH(req: Request) {
 
     if (error) throw error;
 
-    return NextResponse.json(data);
+    return NextResponse.json({
+      ...data,
+      current_stock: updatedStock
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

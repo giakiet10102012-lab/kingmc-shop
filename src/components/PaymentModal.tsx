@@ -10,9 +10,10 @@ interface PaymentModalProps {
   settings: ShopSettings;
   onClose: () => void;
   onOpenTicket?: (order: Order) => void;
+  onPaymentConfirmed?: (updatedStock?: number) => void;
 }
 
-export default function PaymentModal({ order, settings, onClose, onOpenTicket }: PaymentModalProps) {
+export default function PaymentModal({ order, settings, onClose, onOpenTicket, onPaymentConfirmed }: PaymentModalProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -37,6 +38,10 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket }:
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (onPaymentConfirmed) {
+          onPaymentConfirmed(data?.current_stock);
+        }
         setSuccess(true);
         setTimeout(() => onClose(), 2000);
       }
