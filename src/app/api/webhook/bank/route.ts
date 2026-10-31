@@ -117,20 +117,26 @@ function extractOrderId(text: string): string | null {
 // Trích xuất số tiền nếu payload là chuỗi text (Hỗ trợ Techcombank, ZaloPay, MBBank...)
 function extractAmountFromText(text: string): number {
   if (!text) return 0;
-  // 1. Kiểm tra dấu cộng số tiền: ví dụ +50,000 hoặc +50.000 hoặc + 50000
-  let match = text.match(/\+\s*([\d.,]+)\s*(?:đ|vnd|vnđ)?/i);
+  // 1. Dấu cộng kèm VND/đ hoặc không: ví dụ + VND 3,000 hoặc + 50,000 hoặc +VND 3.100
+  let match = text.match(/\+\s*(?:vnd|vnđ|đ)?\s*([\d.,]+)/i);
   if (match) {
     const num = Number(match[1].replace(/[.,]/g, ''));
     if (!isNaN(num) && num > 0) return num;
   }
-  // 2. Kiểm tra từ khóa nhận/tăng/cộng số tiền (ZaloPay: Ban da nhan duoc 50.000d)
-  match = text.match(/(?:nhan|nhận|tang|tăng|cong|cộng|duoc|được|tien|tiền|gia|giá)\s*(?:duoc|được)?\s*:?\s*([\d.,]+)\s*(?:đ|vnd|vnđ)?/i);
+  // 2. Chữ VND/đ đứng trước số: ví dụ VND 3,000 hoặc VND 50.000
+  match = text.match(/(?:vnd|vnđ|đ)\s*([\d.,]+)/i);
   if (match) {
     const num = Number(match[1].replace(/[.,]/g, ''));
     if (!isNaN(num) && num > 0) return num;
   }
-  // 3. Kiểm tra số tiền kèm đơn vị đ/vnd/vnđ phía sau
+  // 3. Số đứng trước VND/đ: ví dụ 50.000d hoặc 50,000 VND hoặc 3000 VNĐ
   match = text.match(/([\d.,]+)\s*(?:đ|vnd|vnđ)\b/i);
+  if (match) {
+    const num = Number(match[1].replace(/[.,]/g, ''));
+    if (!isNaN(num) && num > 0) return num;
+  }
+  // 4. Từ khóa nhận/tăng/cộng số tiền (ZaloPay)
+  match = text.match(/(?:nhan|nhận|tang|tăng|cong|cộng|duoc|được|tien|tiền|gia|giá|gd)\s*(?:duoc|được)?\s*:?\s*(?:vnd|vnđ|đ)?\s*([\d.,]+)/i);
   if (match) {
     const num = Number(match[1].replace(/[.,]/g, ''));
     if (!isNaN(num) && num > 0) return num;
