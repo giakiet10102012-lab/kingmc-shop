@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShoppingCart, Gamepad2, Coins, AlertTriangle, Loader2, Sparkles, Check, Lock, User, Boxes } from "lucide-react";
+import { ShoppingCart, Gamepad2, Coins, AlertTriangle, Loader2, Sparkles, Check, Lock, User, Boxes, Store, Zap } from "lucide-react";
 import { formatVND, formatNumber, cn } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
 
@@ -17,6 +17,7 @@ const PRESET_AMOUNTS = [5, 10, 20, 50, 100];
 export default function OrderForm({ settings, onOrderCreated, userId, onRequireAuth }: OrderFormProps) {
   const [ign, setIgn] = useState("");
   const [moneyM, setMoneyM] = useState<number | "">("");
+  const [deliveryMethod, setDeliveryMethod] = useState<'ah' | 'pay'>('ah');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,7 +66,8 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
           ign: ign.trim(), 
           money_m: parsedMoney, 
           total_vnd: totalVND,
-          user_id: userId
+          user_id: userId,
+          delivery_method: deliveryMethod
         }),
       });
 
@@ -113,7 +115,7 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
             </div>
             <div>
               <h2 className="text-lg font-bold text-zinc-100">Đặt Mua Money Ingame</h2>
-              <p className="text-xs text-zinc-400">Giao dịch tự động qua sàn đấu giá /ah</p>
+              <p className="text-xs text-zinc-400">Giao dịch tự động qua sàn /ah hoặc chuyển /pay trực tiếp</p>
             </div>
           </div>
 
@@ -186,6 +188,79 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
             </button>
           </div>
         )}
+
+        {/* PHƯƠNG THỨC NHẬN TIỀN INGAME (LỰA CHỌN CỦA KHÁCH) */}
+        <div className="space-y-2.5">
+          <label className="text-sm font-bold text-zinc-200 flex items-center justify-between">
+            <span>Chọn Hình Thức Nhận Money:</span>
+            <span className="text-xs text-emerald-400 font-normal">Tùy bạn chọn</span>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Cách 1: Treo sàn /ah */}
+            <button
+              type="button"
+              onClick={() => setDeliveryMethod('ah')}
+              className={cn(
+                "p-3.5 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer relative",
+                deliveryMethod === 'ah'
+                  ? "bg-emerald-500/10 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                  : "bg-[#0a0a0f] border-[#1e1e2e] hover:border-zinc-700 opacity-80 hover:opacity-100"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "p-1.5 rounded-lg",
+                    deliveryMethod === 'ah' ? "bg-emerald-500 text-black font-bold" : "bg-[#1e1e2e] text-zinc-400"
+                  )}>
+                    <Store size={16} />
+                  </div>
+                  <span className={cn("text-xs sm:text-sm font-extrabold", deliveryMethod === 'ah' ? "text-emerald-400" : "text-zinc-200")}>
+                    Treo Sàn /ah
+                  </span>
+                </div>
+                {deliveryMethod === 'ah' && (
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-snug">
+                Treo 1 món đồ lên sàn /ah, Admin/Bot sẽ tìm và mua đồ đó của bạn.
+              </p>
+            </button>
+
+            {/* Cách 2: Chuyển /pay trực tiếp */}
+            <button
+              type="button"
+              onClick={() => setDeliveryMethod('pay')}
+              className={cn(
+                "p-3.5 rounded-2xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer relative",
+                deliveryMethod === 'pay'
+                  ? "bg-purple-500/10 border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.2)]"
+                  : "bg-[#0a0a0f] border-[#1e1e2e] hover:border-zinc-700 opacity-80 hover:opacity-100"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "p-1.5 rounded-lg",
+                    deliveryMethod === 'pay' ? "bg-purple-500 text-white font-bold" : "bg-[#1e1e2e] text-zinc-400"
+                  )}>
+                    <Zap size={16} />
+                  </div>
+                  <span className={cn("text-xs sm:text-sm font-extrabold", deliveryMethod === 'pay' ? "text-purple-400" : "text-zinc-200")}>
+                    Pay Trực Tiếp (/pay)
+                  </span>
+                </div>
+                {deliveryMethod === 'pay' && (
+                  <span className="h-2 w-2 rounded-full bg-purple-400 animate-pulse"></span>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-snug">
+                Chỉ cần vào game online, Admin/Bot sẽ chuyển tiền trực tiếp cho bạn!
+              </p>
+            </button>
+          </div>
+        </div>
 
         <div className="flex flex-col gap-5">
           {/* Input 1: IGN */}
@@ -293,7 +368,7 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
             <div>
               <span className="text-sm font-bold text-zinc-300 block">Tổng Thanh Toán:</span>
               <span className="text-xs text-emerald-400 flex items-center gap-1">
-                <Check size={12} /> Khách nhận đủ {parsedMoney || 0}M ingame
+                <Check size={12} /> Khách nhận đủ {parsedMoney || 0}M ingame ({deliveryMethod === 'pay' ? 'Chuyển /pay' : 'Mua /ah'})
               </span>
             </div>
             <span className="text-2xl sm:text-3xl font-black text-emerald-400 tracking-tight">
@@ -302,28 +377,56 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
           </div>
         </div>
 
-        {/* MANDATORY WARNING BOX */}
-        <div className="border-2 border-amber-500/80 bg-amber-500/10 rounded-2xl p-4 sm:p-5 flex flex-col gap-3 shadow-[0_0_20px_rgba(245,158,11,0.1)]">
+        {/* DYNAMIC MANDATORY WARNING BOX DEPENDING ON DELIVERY METHOD */}
+        <div className={cn(
+          "border-2 rounded-2xl p-4 sm:p-5 flex flex-col gap-3 shadow-lg transition-all",
+          deliveryMethod === 'pay'
+            ? "border-purple-500/80 bg-purple-500/10 shadow-[0_0_20px_rgba(168,85,247,0.1)]"
+            : "border-amber-500/80 bg-amber-500/10 shadow-[0_0_20px_rgba(245,158,11,0.1)]"
+        )}>
           <div className="flex items-center gap-2">
-            <div className="rounded-lg bg-amber-500/20 p-1.5 text-amber-400">
-              <AlertTriangle className="w-5 h-5" />
+            <div className={cn(
+              "rounded-lg p-1.5",
+              deliveryMethod === 'pay' ? "bg-purple-500/20 text-purple-400" : "bg-amber-500/20 text-amber-400"
+            )}>
+              {deliveryMethod === 'pay' ? <Zap className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
             </div>
-            <h3 className="font-bold text-amber-400 text-sm sm:text-base">LƯU Ý BẮT BUỘC TRƯỚC KHI ĐẶT ĐƠN</h3>
+            <h3 className={cn("font-bold text-sm sm:text-base", deliveryMethod === 'pay' ? "text-purple-400" : "text-amber-400")}>
+              {deliveryMethod === 'pay' ? "HƯỚNG DẪN NHẬN /PAY TRỰC TIẾP:" : "LƯU Ý BẮT BUỘC TRƯỚC KHI ĐẶT ĐƠN (SÀN /AH):"}
+            </h3>
           </div>
-          <ul className="text-xs sm:text-sm text-amber-100/90 space-y-2.5 list-none pl-1">
-            <li className="flex items-start gap-2">
-              <span className="text-amber-400 font-bold shrink-0">1.</span>
-              <span>
-                Vào game KingMC dùng đúng tài khoản <strong className="text-amber-300 underline font-mono">{ign.trim() || "[Tên Ingame của bạn]"}</strong> treo đúng <strong>1 món đồ bất kỳ</strong> lên <strong className="text-emerald-400 font-mono">/ah</strong> với giá đúng bằng <strong className="text-amber-300 font-mono">{parsedMoney || "[Số M]"}M</strong>.
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-amber-400 font-bold shrink-0">2.</span>
-              <span>
-                <strong>Tuyệt đối KHÔNG</strong> treo thêm món đồ nào khác trong thời gian chờ duyệt để tránh Admin mua nhầm.
-              </span>
-            </li>
-          </ul>
+
+          {deliveryMethod === 'ah' ? (
+            <ul className="text-xs sm:text-sm text-amber-100/90 space-y-2.5 list-none pl-1">
+              <li className="flex items-start gap-2">
+                <span className="text-amber-400 font-bold shrink-0">1.</span>
+                <span>
+                  Vào game KingMC dùng đúng tài khoản <strong className="text-amber-300 underline font-mono">{ign.trim() || "[Tên Ingame của bạn]"}</strong> treo đúng <strong>1 món đồ bất kỳ</strong> lên <strong className="text-emerald-400 font-mono">/ah</strong> với giá đúng bằng <strong className="text-amber-300 font-mono">{parsedMoney || "[Số M]"}M</strong>.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-400 font-bold shrink-0">2.</span>
+                <span>
+                  <strong>Tuyệt đối KHÔNG</strong> treo thêm món đồ nào khác trong thời gian chờ duyệt để tránh Admin/Bot mua nhầm.
+                </span>
+              </li>
+            </ul>
+          ) : (
+            <ul className="text-xs sm:text-sm text-purple-100/90 space-y-2.5 list-none pl-1">
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 font-bold shrink-0">1.</span>
+                <span>
+                  Vào game KingMC và giữ tài khoản <strong className="text-purple-300 underline font-mono">{ign.trim() || "[Tên Ingame của bạn]"}</strong> luôn ở trạng thái <strong>ONLINE</strong> trong server.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400 font-bold shrink-0">2.</span>
+                <span>
+                  Sau khi xác nhận thanh toán, hệ thống / Bot / Admin sẽ gõ lệnh <strong className="text-emerald-400 font-mono">/pay {ign.trim() || "[Nick]"} {parsedMoney || "[Số M]"}M</strong> để chuyển thẳng vào ví của bạn. Bạn <strong>không cần phải treo đồ lên /ah</strong>!
+                </span>
+              </li>
+            </ul>
+          )}
         </div>
 
         {error && (
@@ -360,7 +463,7 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
             ) : !isShopActive ? (
               "SHOP HIỆN TẠI TẠM ĐÓNG"
             ) : (
-              "TẠO ĐƠN VÀ THANH TOÁN"
+              `TẠO ĐƠN ${deliveryMethod === 'pay' ? 'PAY TIỀN' : 'MUA /AH'} VÀ THANH TOÁN`
             )}
           </button>
         )}

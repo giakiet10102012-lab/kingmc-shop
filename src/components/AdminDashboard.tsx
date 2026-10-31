@@ -24,9 +24,15 @@ import {
   Trash2,
   MessageSquare,
   RotateCcw,
-  Boxes
+  Boxes,
+  Zap,
+  Store,
+  Copy,
+  Terminal,
+  ExternalLink,
+  Activity
 } from 'lucide-react';
-import { Order, ShopSettings } from '@/lib/types';
+import { Order, ShopSettings, BankLog } from '@/lib/types';
 import { cn, formatNumber, formatVND, getStatusColor, getStatusLabel } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import OrderTicketModal from './OrderTicketModal';
@@ -64,7 +70,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     money_stock: 1000
   });
 
-  const [activeMainSection, setActiveMainSection] = useState<'orders' | 'settings'>('orders');
+  const [activeMainSection, setActiveMainSection] = useState<'orders' | 'bank_logs' | 'settings'>('orders');
   const [activeTab, setActiveTab] = useState<'all' | 'paid_waiting' | 'pending' | 'completed' | 'cancelled' | 'hidden'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cancelDropdown, setCancelDropdown] = useState<string | null>(null);
@@ -77,6 +83,119 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [hiddenOrders, setHiddenOrders] = useState<Order[]>([]);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  // Bank logs states
+  const [bankLogs, setBankLogs] = useState<BankLog[]>([]);
+  const [isRefreshingLogs, setIsRefreshingLogs] = useState(false);
+  const [matchingLogId, setMatchingLogId] = useState<string | null>(null);
+  const [manualOrderId, setManualOrderId] = useState<string>('');
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+
+  // Fetch bank logs
+  const fetchBankLogs = async () => {
+    setIsRefreshingLogs(true);
+    try {
+      const res = await fetch('/api/webhook/bank', { headers: { 'x-admin-pin': pin.trim() } });
+      if (res.ok) {
+        const data = await res.json();
+        setBankLogs(Array.isArray(data.logs) ? data.logs : []);
+      }
+    } catch (e) {
+      console.error('Fetch bank logs error:', e);
+    } finally {
+      setIsRefreshingLogs(false);
+    }
+  };
+
+  // Khớp đơn thủ công
+  const handleManualMatch = async (logId: string, orderId: string) => {
+    if (!orderId.trim()) return alert('Vui lòng nhập mã đơn hàng (VD: KMC-1234)');
+    try {
+      const res = await fetch('/api/webhook/bank', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin.trim() },
+        body: JSON.stringify({ log_id: logId, order_id: orderId.trim() })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || 'Khớp đơn thành công!');
+        fetchBankLogs();
+        fetchOrders();
+        fetchSettings();
+        setMatchingLogId(null);
+        setManualOrderId('');
+      } else {
+        alert(data.error || 'Lỗi khi khớp đơn');
+      }
+    } catch {
+      alert('Lỗi kết nối khi khớp đơn');
+    }
+  };
+
+  // Xóa log ngân hàng
+  const handleDeleteLog = async (logId: string) => {
+    if (!window.confirm('Bạn có chắc muốn xóa bản ghi log này?')) return;
+    try {
+      const res = await fetch(`/api/webhook/bank?id=${logId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-pin': pin.trim() }
+      });
+      if (res.ok) {
+        setBankLogs(prev => prev.filter(l => l.id !== logId));
+      }
+    } catch {
+      alert('Lỗi khi xóa log');
+    }
+  };
+
+  // Xóa toàn bộ log
+  const handleClearAllLogs = async () => {
+    if (!window.confirm('Bạn có chắc muốn XÓA TẤT CẢ nhật ký biến động số dư?')) return;
+    try {
+      const res = await fetch('/api/webhook/bank', {
+        method: 'DELETE',
+        headers: { 'x-admin-pin': pin.trim() }
+      });
+      if (res.ok) {
+        setBankLogs([]);
+        alert('Đã xóa toàn bộ nhật ký!');
+      }
+    } catch {
+      alert('Lỗi khi xóa');
+    }
+  };
+
+  // Gửi giao dịch test giả lập
+  const handleTestTransaction = async () => {
+    const pendingOrder = orders.find(o => o.status === 'pending');
+    const testOrderId = pendingOrder ? pendingOrder.id : (orders[0]?.id || 'KMC-9999');
+    const testAmount = pendingOrder ? pendingOrder.total_vnd : 50000;
+    const confirmed = window.confirm(`Bạn có muốn gửi một giao dịch TEST giả lập ngân hàng với mã đơn #${testOrderId} và số tiền ${formatVND(testAmount)}?`);
+    if (!confirmed) return;
+    try {
+      const res = await fetch('/api/webhook/bank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transferAmount: testAmount,
+          content: `${testOrderId} TEST CHUYEN KHOAN`,
+          gateway: 'Techcombank_Test',
+          referenceCode: `TEST-${Date.now().toString().slice(-4)}`
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Đã gửi giao dịch test thành công! Kết quả: ${data.status}\nĐơn hàng #${testOrderId} đã được tự động xử lý.`);
+        fetchBankLogs();
+        fetchOrders();
+        fetchSettings();
+      } else {
+        alert(data.error || 'Lỗi gửi test');
+      }
+    } catch {
+      alert('Lỗi kết nối khi gửi test');
+    }
+  };
 
   // Fetch orders
   const fetchOrders = async () => {
@@ -153,6 +272,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     fetchOrders();
     fetchHiddenOrders();
     fetchSettings();
+    fetchBankLogs();
 
     // Supabase Realtime subscription
     const channel = supabase.channel('admin-realtime')
@@ -163,6 +283,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_configs' }, () => {
         fetchSettings();
+        fetchBankLogs();
       })
       .subscribe();
 
@@ -444,8 +565,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
           </button>
         </div>
 
-        {/* 2 TOP-LEVEL WORKSPACE TABS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-1.5 rounded-2xl bg-[#12121a] border border-[#1e1e2e]">
+        {/* 3 TOP-LEVEL WORKSPACE TABS */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-1.5 rounded-2xl bg-[#12121a] border border-[#1e1e2e]">
           <button
             onClick={() => setActiveMainSection('orders')}
             className={cn(
@@ -468,6 +589,30 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
           </button>
 
           <button
+            onClick={() => {
+              setActiveMainSection('bank_logs');
+              fetchBankLogs();
+            }}
+            className={cn(
+              "flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-bold transition-all relative",
+              activeMainSection === 'bank_logs'
+                ? "bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                : "text-zinc-400 hover:text-white hover:bg-[#1a1a28]"
+            )}
+          >
+            <Activity size={18} />
+            <span>Nhật Ký Ngân Hàng</span>
+            {bankLogs.length > 0 && (
+              <span className={cn(
+                "px-2 py-0.5 rounded-full text-xs font-black",
+                activeMainSection === 'bank_logs' ? "bg-black text-white" : "bg-blue-500/30 text-blue-300 border border-blue-500/40"
+              )}>
+                {bankLogs.length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveMainSection('settings')}
             className={cn(
               "flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-bold transition-all",
@@ -477,9 +622,217 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
             )}
           >
             <Settings size={18} />
-            <span>Cài Đặt Tỷ Giá & Ngân Hàng / QR</span>
+            <span>Cài Đặt Shop & Discord</span>
           </button>
         </div>
+
+        {/* SECTION 2: BANK WEBHOOK & TRANSACTION LOGS */}
+        {activeMainSection === 'bank_logs' && (
+          <div className="space-y-6">
+            {/* Top Control & Webhook Info Card */}
+            <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] p-6 shadow-xl space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1e1e2e] pb-5">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
+                    <Activity className="text-blue-400" size={22} />
+                    <span>Nhật Ký Biến Động Số Dư & Webhook Ngân Hàng</span>
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Đọc log mọi lúc mọi nơi: Hệ thống tự động nhận diện tiền vào, quét mã đơn KMC-XXXX và trừ kho tức thì.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={handleTestTransaction}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500 hover:text-white border border-purple-500/40 text-purple-300 text-xs font-bold transition-all shadow-[0_0_15px_rgba(168,85,247,0.2)]"
+                    title="Gửi một biến động số dư giả lập để test tính năng khớp đơn"
+                  >
+                    <span>🧪 Gửi Test Giả Lập</span>
+                  </button>
+
+                  <button
+                    onClick={fetchBankLogs}
+                    disabled={isRefreshingLogs}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0a0a0f] hover:bg-[#1e1e2e] border border-[#1e1e2e] text-zinc-300 text-xs font-medium transition-colors"
+                  >
+                    <RefreshCw size={14} className={cn(isRefreshingLogs && "animate-spin text-blue-400")} />
+                    <span>Làm mới log</span>
+                  </button>
+
+                  {bankLogs.length > 0 && (
+                    <button
+                      onClick={handleClearAllLogs}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500 hover:text-white border border-red-500/30 text-red-400 text-xs font-medium transition-colors"
+                    >
+                      <Trash2 size={14} />
+                      <span>Xóa hết</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Webhook Endpoint Copy Card */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2 rounded-xl bg-[#0a0a0f] border border-[#1e1e2e] p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                      <Terminal size={14} /> Link Webhook Nhận Tiền Ngân Hàng:
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText('https://kingmc-shop.vercel.app/api/webhook/bank');
+                        setCopiedWebhook(true);
+                        setTimeout(() => setCopiedWebhook(false), 2500);
+                      }}
+                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:underline"
+                    >
+                      <Copy size={12} />
+                      <span>{copiedWebhook ? "Đã copy link ✓" : "Sao chép link Webhook"}</span>
+                    </button>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-[#12121a] border border-[#1e1e2e] font-mono text-xs text-emerald-400 break-all select-all">
+                    https://kingmc-shop.vercel.app/api/webhook/bank
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    💡 Hỗ trợ: <strong>SePay, Casso, Techcombank SMS/App bot, Webhook Discord Forwarder, hoặc bất kỳ tool thông báo tiền vào nào</strong>. Dán link này vào mục Webhook của bạn để kích hoạt hệ thống tự động!
+                  </p>
+                </div>
+
+                {/* Log Quick Stats */}
+                <div className="grid grid-cols-3 lg:grid-cols-1 gap-2.5">
+                  <div className="rounded-xl bg-[#0a0a0f] border border-[#1e1e2e] p-3 text-center lg:text-left flex lg:flex-row flex-col items-center justify-between">
+                    <span className="text-xs text-zinc-400">Tổng Giao Dịch:</span>
+                    <span className="text-base font-black text-white">{bankLogs.length}</span>
+                  </div>
+                  <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3 text-center lg:text-left flex lg:flex-row flex-col items-center justify-between">
+                    <span className="text-xs text-emerald-400 font-semibold">Khớp Đơn:</span>
+                    <span className="text-base font-black text-emerald-400">
+                      {bankLogs.filter(l => l.status === 'matched').length}
+                    </span>
+                  </div>
+                  <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-center lg:text-left flex lg:flex-row flex-col items-center justify-between">
+                    <span className="text-xs text-amber-400 font-semibold">Cần Kiểm Tra:</span>
+                    <span className="text-base font-black text-amber-400">
+                      {bankLogs.filter(l => l.status !== 'matched').length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bank Logs Table */}
+            <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] shadow-xl overflow-hidden">
+              <div className="p-4 border-b border-[#1e1e2e] bg-[#0e0e14] flex items-center justify-between">
+                <span className="text-xs uppercase tracking-wider font-bold text-zinc-300">
+                  Danh Sách Giao Dịch Gần Nhất ({bankLogs.length})
+                </span>
+                <span className="text-xs text-zinc-500">Cập nhật tự động theo thời gian thực</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[#1e1e2e]/40 text-zinc-400 text-xs">
+                    <tr>
+                      <th className="p-4 font-semibold">Thời Gian</th>
+                      <th className="p-4 font-semibold">Cổng / Mã GD</th>
+                      <th className="p-4 font-semibold">Số Tiền Nhận</th>
+                      <th className="p-4 font-semibold">Nội Dung Chuyển Khoản</th>
+                      <th className="p-4 font-semibold">Mã Đơn Khớp</th>
+                      <th className="p-4 font-semibold">Trạng Thái</th>
+                      <th className="p-4 font-semibold text-right">Thao Tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1e1e2e]">
+                    {bankLogs.map(log => (
+                      <tr key={log.id} className="hover:bg-[#1e1e2e]/30 transition-colors">
+                        <td className="p-4 text-xs text-zinc-400 whitespace-nowrap">
+                          {new Date(log.timestamp).toLocaleString('vi-VN')}
+                        </td>
+                        <td className="p-4 text-xs font-mono text-zinc-300">
+                          <span className="px-2 py-0.5 rounded bg-[#0a0a0f] border border-[#1e1e2e]">
+                            {log.gateway || 'Bank'}
+                          </span>
+                        </td>
+                        <td className="p-4 font-mono font-black text-emerald-400 text-sm">
+                          +{formatVND(log.amount)}
+                        </td>
+                        <td className="p-4 text-xs max-w-xs break-words">
+                          <span className="bg-[#0a0a0f] border border-[#1e1e2e] px-2.5 py-1 rounded text-zinc-200 font-mono">
+                            {log.content || '(Không có nội dung)'}
+                          </span>
+                        </td>
+                        <td className="p-4 font-mono font-bold">
+                          {log.order_id ? (
+                            <span className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+                              #{log.order_id}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-500 text-xs italic">Chưa khớp</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          {log.status === 'matched' ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              🟢 ĐÃ KHỚP TỰ ĐỘNG
+                            </span>
+                          ) : log.status === 'underpaid' ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                              ⚠️ THIẾU TIỀN
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                              ❓ CHƯA KHỚP CÚ PHÁP
+                            </span>
+                          )}
+                          {log.note && (
+                            <div className="text-[10px] text-zinc-400 mt-1">{log.note}</div>
+                          )}
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {log.status !== 'matched' && (
+                              <button
+                                onClick={() => {
+                                  const targetId = prompt('Nhập mã đơn hàng cần khớp với giao dịch này (VD: KMC-1234):', log.order_id || '');
+                                  if (targetId) handleManualMatch(log.id, targetId);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500 hover:text-white border border-blue-500/40 text-blue-300 text-xs font-bold transition-all"
+                              >
+                                Khớp Thủ Công
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteLog(log.id)}
+                              className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+                              title="Xóa dòng log này"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {bankLogs.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="p-12 text-center text-zinc-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Activity className="h-8 w-8 text-zinc-600" />
+                            <p className="text-sm">Chưa có giao dịch biến động số dư nào được ghi nhận.</p>
+                            <p className="text-xs text-zinc-600">
+                              Bấm nút &ldquo;Gửi Test Giả Lập&rdquo; ở trên để thử nghiệm hệ thống.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* SHOP & BANK SETTINGS */}
         {activeMainSection === 'settings' && (
@@ -773,6 +1126,27 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                   )}
                 </div>
 
+                {/* Discord Webhook URL Setting */}
+                <div className="space-y-2 pt-3 border-t border-[#1e1e2e]">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-[#5865F2] flex items-center gap-2">
+                      <MessageSquare size={16} />
+                      <span>Link Discord Webhook Nhận Thông Báo Biến Động Số Dư & Khớp Đơn (Tùy chọn)</span>
+                    </label>
+                    <span className="text-[11px] text-zinc-400">Đọc log trực tiếp trên Discord</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={settings.discord_webhook_url || ''}
+                    onChange={e => setSettings({...settings, discord_webhook_url: e.target.value.trim()})}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] px-3.5 py-2.5 text-xs text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-[#5865F2] font-mono"
+                  />
+                  <p className="text-[11px] text-zinc-500">
+                    💡 Khi có khách chuyển tiền ngân hàng hoặc hệ thống tự động khớp đơn, một thông báo chi tiết sẽ được gửi ngay lập tức vào kênh Discord này để bạn đọc log mọi lúc mọi nơi trên điện thoại!
+                  </p>
+                </div>
+
                 {/* VietQR Live Preview Box */}
                 {showPreviewQr && (
                   <div className="rounded-xl border border-[#1e1e2e] bg-[#12121a] p-4 flex flex-col sm:flex-row items-center gap-4">
@@ -938,9 +1312,20 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                           {new Date(order.created_at).toLocaleString('vi-VN')}
                         </td>
                         <td className="p-4">
-                          <span className="font-semibold text-zinc-100 bg-[#0a0a0f] border border-[#1e1e2e] px-2.5 py-1 rounded-md">
-                            {order.ign}
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="font-semibold text-zinc-100 bg-[#0a0a0f] border border-[#1e1e2e] px-2.5 py-1 rounded-md">
+                              {order.ign}
+                            </span>
+                            {order.delivery_method === 'pay' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                <Zap size={11} className="text-purple-400" /> Pay trực tiếp
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                <Store size={11} className="text-emerald-400" /> Sàn /ah
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-4 font-bold text-zinc-100">
                           {formatNumber(order.money_m)} M
@@ -996,14 +1381,35 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                               <>
                                 {(order.status === 'pending' || order.status === 'paid_waiting') && (
                                   <>
-                                    {/* Nút Xác nhận đã mua AH */}
+                                    {/* Nút Copy lệnh /pay nếu là đơn pay tiền */}
+                                    {order.delivery_method === 'pay' && (
+                                      <button
+                                        onClick={() => {
+                                          const rawMoney = Number(order.money_m) * 1000000;
+                                          navigator.clipboard.writeText(`/pay ${order.ign} ${rawMoney}`);
+                                          alert(`Đã sao chép lệnh game:\n/pay ${order.ign} ${rawMoney}\n(Vào game KingMC dán để chuyển tiền)`);
+                                        }}
+                                        title="Sao chép lệnh /pay vào clipboard"
+                                        className="flex items-center gap-1 rounded-lg bg-purple-500/20 border border-purple-500/40 hover:bg-purple-500 hover:text-white px-2 py-1.5 text-xs font-bold text-purple-300 transition-all shadow-[0_0_10px_rgba(168,85,247,0.15)]"
+                                      >
+                                        <Copy size={13} />
+                                        <span>Copy /pay</span>
+                                      </button>
+                                    )}
+
+                                    {/* Nút Xác nhận đã duyệt đơn */}
                                     <button 
                                       onClick={() => updateOrderStatus(order.id, 'completed')} 
-                                      title="Admin vào game mua món đồ /ah của khách xong bấm nút này" 
-                                      className="flex items-center gap-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 px-3 py-1.5 text-xs font-bold text-[#0a0a0f] transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                      title={order.delivery_method === 'pay' ? "Admin vào game gõ /pay xong bấm nút này" : "Admin vào game mua món đồ /ah của khách xong bấm nút này"} 
+                                      className={cn(
+                                        "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all",
+                                        order.delivery_method === 'pay'
+                                          ? "bg-purple-500 hover:bg-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)]"
+                                          : "bg-emerald-500 hover:bg-emerald-400 text-[#0a0a0f] shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                                      )}
                                     >
                                       <Check size={14} /> 
-                                      <span>ĐÃ MUA AH</span>
+                                      <span>{order.delivery_method === 'pay' ? "ĐÃ PAY TIỀN" : "ĐÃ MUA AH"}</span>
                                     </button>
 
                                     {/* Nút Hủy Đơn */}

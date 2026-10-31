@@ -10,6 +10,7 @@ export interface Order {
   cancel_reason: string | null;
   created_at: string;
   hidden_from_admin?: boolean;
+  delivery_method?: 'ah' | 'pay';
 }
 
 export interface AppConfig {
@@ -43,6 +44,7 @@ export interface ShopSettings {
   qr_image_url?: string; // Link ảnh QR tùy chỉnh của shop
   custom_catalog?: string; // JSON string chứa danh mục các gói bán do admin tùy chỉnh
   money_stock?: number; // Số lượng Money (M) còn trong kho của shop
+  discord_webhook_url?: string; // Webhook Discord của Admin để nhận log biến động số dư và thông báo đơn mới
 }
 
 export interface OrderMessage {
@@ -52,4 +54,15 @@ export interface OrderMessage {
   sender_name?: string;
   message: string;
   created_at: string;
+}
+
+export interface BankLog {
+  id: string;
+  timestamp: string;
+  amount: number;
+  content: string;
+  order_id: string | null;
+  status: 'matched' | 'underpaid' | 'unmatched';
+  gateway?: string;
+  note?: string;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { QrCode, Building2, Copy, CheckCircle2, AlertTriangle, X, Camera, MessageSquare } from "lucide-react";
+import { QrCode, Building2, Copy, CheckCircle2, AlertTriangle, X, Camera, MessageSquare, Store, Zap } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
 
@@ -79,7 +79,7 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-6">
           
-          <div className="grid grid-cols-3 gap-4 bg-[#0a0a0f] p-4 rounded-xl border border-[#1e1e2e]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#0a0a0f] p-4 rounded-xl border border-[#1e1e2e]">
             <div>
               <p className="text-xs text-zinc-500 mb-1">Tên Ingame</p>
               <p className="font-bold text-zinc-200">{order.ign}</p>
@@ -92,6 +92,31 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
               <p className="text-xs text-zinc-500 mb-1">Tổng Tiền</p>
               <p className="font-bold text-emerald-400">{formatVND(order.total_vnd)}</p>
             </div>
+            <div>
+              <p className="text-xs text-zinc-500 mb-1">Hình Thức Nhận</p>
+              <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${order.delivery_method === 'pay' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>
+                {order.delivery_method === 'pay' ? '⚡ Pay Trực Tiếp' : '🏪 Treo Sàn /ah'}
+              </span>
+            </div>
+          </div>
+
+          {/* Delivery reminder banner */}
+          <div className={`border p-3.5 rounded-xl flex items-center gap-3 ${order.delivery_method === 'pay' ? 'bg-purple-500/10 border-purple-500/30 text-purple-200' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'}`}>
+            {order.delivery_method === 'pay' ? (
+              <>
+                <Zap className="w-5 h-5 shrink-0 text-purple-400" />
+                <p className="text-xs sm:text-sm">
+                  <strong>Hình thức: Chuyển /pay trực tiếp.</strong> Quý khách chỉ cần vào game KingMC giữ nick <strong>{order.ign}</strong> online, hệ thống sẽ chuyển tiền trực tiếp cho bạn sau khi xác nhận!
+                </p>
+              </>
+            ) : (
+              <>
+                <Store className="w-5 h-5 shrink-0 text-emerald-400" />
+                <p className="text-xs sm:text-sm">
+                  <strong>Hình thức: Treo sàn /ah.</strong> Quý khách dùng nick <strong>{order.ign}</strong> treo đúng 1 món đồ lên sàn /ah với giá <strong>{order.money_m}M</strong> để shop mua nhé!
+                </p>
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

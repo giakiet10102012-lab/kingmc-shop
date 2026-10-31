@@ -162,9 +162,14 @@ export default function OrderHistoryModal({
                     </span>
                   </div>
 
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(order.status)}`}>
-                    {getStatusLabel(order.status)}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${order.delivery_method === 'pay' ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'}`}>
+                      {order.delivery_method === 'pay' ? '⚡ /pay trực tiếp' : '🏪 Sàn /ah'}
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(order.status)}`}>
+                      {getStatusLabel(order.status)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">

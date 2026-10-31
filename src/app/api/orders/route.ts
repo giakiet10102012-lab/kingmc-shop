@@ -65,7 +65,8 @@ async function adjustStock(supabase: any, delta: number): Promise<number | null>
 
 export async function POST(req: Request) {
   try {
-    const { ign, money_m, total_vnd, user_id } = await req.json();
+    const { ign, money_m, total_vnd, user_id, delivery_method } = await req.json();
+    const method = delivery_method === 'pay' ? 'pay' : 'ah';
     
     // YÊU CẦU BẮT BUỘC ĐĂNG NHẬP TRƯỚC KHI MUA HÀNG
     if (!user_id) {
@@ -110,20 +111,40 @@ export async function POST(req: Request) {
 
     const id = generateOrderId();
     
-    const { data, error } = await supabase
+    let insertObj: any = { 
+      id, 
+      ign, 
+      money_m, 
+      total_vnd, 
+      status: 'pending',
+      user_id: user_id || null,
+      delivery_method: method
+    };
+
+    let { data, error } = await supabase
       .from('orders')
-      .insert([{ 
-        id, 
-        ign, 
-        money_m, 
-        total_vnd, 
-        status: 'pending',
-        user_id: user_id || null 
-      }])
+      .insert([insertObj])
       .select()
       .single();
       
-    if (error) throw error;
+    if (error) {
+      // Fallback nếu database Supabase chưa chạy migration thêm cột delivery_method
+      if (error.message?.includes('delivery_method') || error.code === '42703') {
+        delete insertObj.delivery_method;
+        const retryRes = await supabase.from('orders').insert([insertObj]).select().single();
+        if (retryRes.error) throw retryRes.error;
+        data = { ...retryRes.data, delivery_method: method };
+        try {
+          await supabase.from('app_configs').upsert({
+            key: `order_delivery_${id}`,
+            value: method,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'key' });
+        } catch {}
+      } else {
+        throw error;
+      }
+    }
     
     return NextResponse.json(data);
   } catch (error: any) {
@@ -163,6 +184,27 @@ export async function GET(req: Request) {
 
     const { data, error } = await query;
     if (error) throw error;
+
+    // Bổ sung delivery_method cho các đơn cũ hoặc fallback từ app_configs
+    if (Array.isArray(data)) {
+      try {
+        const { data: deliveryCfgs } = await supabase
+          .from('app_configs')
+          .select('key, value')
+          .like('key', 'order_delivery_%');
+        const deliveryMap = new Map<string, string>();
+        if (deliveryCfgs) {
+          deliveryCfgs.forEach((c: any) => {
+            deliveryMap.set(c.key.replace('order_delivery_', ''), c.value);
+          });
+        }
+        data.forEach((o: any) => {
+          if (!o.delivery_method) {
+            o.delivery_method = deliveryMap.get(o.id) || 'ah';
+          }
+        });
+      } catch {}
+    }
 
     // NẾU LÀ ADMIN:
     if (isAdmin && Array.isArray(data)) {

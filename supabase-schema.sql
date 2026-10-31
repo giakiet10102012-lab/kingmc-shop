@@ -8,11 +8,13 @@ CREATE TABLE IF NOT EXISTS orders (
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid_waiting', 'completed', 'cancelled')),
     cancel_reason TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    hidden_from_admin BOOLEAN DEFAULT false
+    hidden_from_admin BOOLEAN DEFAULT false,
+    delivery_method TEXT DEFAULT 'ah' CHECK (delivery_method IN ('ah', 'pay'))
 );
 
--- Thêm cột hidden_from_admin nếu bảng đã tồn tại từ trước
+-- Thêm cột hidden_from_admin & delivery_method nếu bảng đã tồn tại từ trước
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS hidden_from_admin BOOLEAN DEFAULT false;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_method TEXT DEFAULT 'ah';
 
 -- Tạo bảng app_configs (Lưu trữ cấu hình của shop)
 CREATE TABLE IF NOT EXISTS app_configs (
@@ -81,4 +83,3 @@ DROP POLICY IF EXISTS "Cho phép xóa tin nhắn" ON order_messages;
 CREATE POLICY "Cho phép xóa tin nhắn" ON order_messages FOR DELETE USING (true);
 
 ALTER PUBLICATION supabase_realtime ADD TABLE order_messages;
-
