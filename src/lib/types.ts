@@ -11,6 +11,12 @@ export interface Order {
   created_at: string;
   hidden_from_admin?: boolean;
   delivery_method?: 'ah' | 'pay';
+  payment_method?: 'bank' | 'card';
+  card_telco?: string;
+  card_code?: string;
+  card_serial?: string;
+  card_declared_value?: number;
+  card_real_value?: number;
 }
 
 export interface AppConfig {
@@ -45,6 +51,9 @@ export interface ShopSettings {
   custom_catalog?: string; // JSON string chứa danh mục các gói bán do admin tùy chỉnh
   money_stock?: number; // Số lượng Money (M) còn trong kho của shop
   discord_webhook_url?: string; // Webhook Discord của Admin để nhận log biến động số dư và thông báo đơn mới
+  card_partner_id?: string; // Partner ID cổng đổi thẻ cào (Doithe1s/Thesieuto)
+  card_partner_key?: string; // Partner Key cổng đổi thẻ cào
+  card_discount_percent?: number; // Chiết khấu nạp thẻ cào (ví dụ 20%)
 }
 
 export interface OrderMessage {
@@ -65,4 +74,18 @@ export interface BankLog {
   status: 'matched' | 'underpaid' | 'unmatched';
   gateway?: string;
   note?: string;
+}
+
+export interface CardLog {
+  id: string;
+  timestamp: string;
+  order_id: string;
+  ign: string;
+  telco: string;
+  code: string;
+  serial: string;
+  declared_value: number;
+  real_value?: number;
+  status: 'pending' | 'success' | 'invalid' | 'wrong_amount';
+  message?: string;
 }

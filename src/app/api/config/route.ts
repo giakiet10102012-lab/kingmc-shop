@@ -11,7 +11,10 @@ const DEFAULT_SETTINGS: ShopSettings = {
   shop_notice: '',
   is_active: true,
   qr_image_url: '',
-  money_stock: 1000
+  money_stock: 1000,
+  card_partner_id: '',
+  card_partner_key: '',
+  card_discount_percent: 20
 };
 
 // Global in-memory cache fallback in case Supabase is unavailable
@@ -47,6 +50,8 @@ export async function GET(req: Request) {
             settings.is_active = row.value !== 'false';
           } else if (row.key === 'money_stock') {
             settings.money_stock = row.value !== undefined && row.value !== null && !isNaN(Number(row.value)) ? Number(row.value) : 1000;
+          } else if (row.key === 'card_discount_percent') {
+            settings.card_discount_percent = row.value !== undefined && !isNaN(Number(row.value)) ? Number(row.value) : 20;
           } else {
             (settings as any)[row.key] = row.value;
           }

@@ -13,7 +13,9 @@ import {
   Store, 
   Zap, 
   Sparkles,
-  Download
+  Download,
+  CreditCard,
+  Clock
 } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
@@ -34,6 +36,8 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
   const [success, setSuccess] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [useCustomQr, setUseCustomQr] = useState(false);
+
+  const isCard = order.payment_method === 'card';
 
   const handleCopy = async (text: string, fieldName: string) => {
     try {
@@ -121,7 +125,9 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[#1e1e2e] bg-[#0a0a0f]">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg sm:text-xl font-bold text-zinc-100">Thanh Toán Đơn Hàng</h2>
+            <h2 className="text-lg sm:text-xl font-bold text-zinc-100">
+              {isCard ? "Đơn Nạp Thẻ Cào Ingame" : "Thanh Toán Đơn Hàng"}
+            </h2>
             <span className="px-3 py-1 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-md text-sm font-mono font-bold">
               {order.id}
             </span>
@@ -142,10 +148,10 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
             </div>
             <div>
               <p className="text-xs text-zinc-500 mb-0.5">Số Lượng</p>
-              <p className="font-bold text-zinc-200 text-sm sm:text-base">{order.money_m}M</p>
+              <p className="font-bold text-zinc-200 text-sm sm:text-base">+{order.money_m}M</p>
             </div>
             <div>
-              <p className="text-xs text-zinc-500 mb-0.5">Tổng Tiền</p>
+              <p className="text-xs text-zinc-500 mb-0.5">{isCard ? "Thực Nhận" : "Tổng Tiền"}</p>
               <p className="font-bold text-emerald-400 text-sm sm:text-base">{formatVND(order.total_vnd)}</p>
             </div>
             <div>
@@ -162,7 +168,7 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
               <>
                 <Zap className="w-5 h-5 shrink-0 text-purple-400" />
                 <p className="text-xs sm:text-sm">
-                  <strong>Hình thức: Chuyển /pay trực tiếp.</strong> Quý khách chỉ cần giữ nick <strong>{order.ign}</strong> online trong game KingMC để nhận tiền!
+                  <strong>Hình thức: Chuyển /pay trực tiếp.</strong> Quý khách chỉ cần giữ nick <strong>{order.ign}</strong> ONLINE trong game KingMC để bot chuyển tiền thẳng vào ví!
                 </p>
               </>
             ) : (
@@ -176,232 +182,215 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
           </div>
 
           {/* ═════════════════════════════════════════════════════════════════ */}
-          {/* BƯỚC 1: SAO CHÉP NỘI DUNG CHUYỂN KHOẢN (ĐƯỢC ĐẶT LÊN ĐẦU TIÊN)    */}
+          {/* NẾU LÀ ĐƠN NẠP THẺ CÀO (GẠCH THẺ TỰ ĐỘNG)                        */}
           {/* ═════════════════════════════════════════════════════════════════ */}
-          <div className="border-2 border-amber-500/80 bg-gradient-to-b from-amber-500/15 via-[#18151f] to-[#12121a] p-4 sm:p-5 rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.15)] space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-amber-500 text-black text-xs font-black flex items-center justify-center">1</span>
-                <h3 className="font-extrabold uppercase text-amber-400 tracking-wide text-sm sm:text-base">
-                  BƯỚC 1: SAO CHÉP NỘI DUNG CHUYỂN KHOẢN (BẮT BUỘC)
-                </h3>
+          {isCard ? (
+            <div className="border-2 border-amber-500/80 bg-gradient-to-b from-amber-500/15 via-[#161622] to-[#0a0a0f] p-5 sm:p-6 rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.15)] space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-full bg-amber-500/20 text-amber-400">
+                  <CreditCard className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold uppercase text-amber-400 tracking-wide text-base sm:text-lg">
+                    ĐÃ TIẾP NHẬN THẺ CÀO #{order.id}
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Hệ thống đang gửi thẻ sang cổng gạch thẻ tự động
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] font-semibold text-amber-300 bg-amber-400/20 px-2 py-0.5 rounded border border-amber-400/30">
-                ⚠️ Bắt buộc điền đúng
-              </span>
-            </div>
 
-            <div className="p-3.5 sm:p-4 bg-black/60 rounded-xl border border-amber-500/40 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-zinc-400 mb-1">Nội dung chuyển tiền của bạn:</p>
-                <p className="text-xl sm:text-2xl font-black font-mono tracking-wider text-amber-300 select-all">
-                  {transferContent}
-                </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-black/60 p-4 rounded-xl border border-amber-500/30 text-xs sm:text-sm">
+                <div>
+                  <span className="text-zinc-500 block mb-0.5">Nhà mạng:</span>
+                  <span className="font-bold text-white text-sm">{order.card_telco || 'Thẻ Cào'}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block mb-0.5">Mệnh giá nạp:</span>
+                  <span className="font-bold text-amber-300 text-sm">{formatVND(order.card_declared_value || order.total_vnd)}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block mb-0.5">Thực nhận (-{settings.card_discount_percent || 20}%):</span>
+                  <span className="font-bold text-emerald-400 text-sm">{formatVND(order.card_real_value || order.total_vnd)}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-500 block mb-0.5">Money Ingame:</span>
+                  <span className="font-black text-amber-300 text-base">+{order.money_m}M</span>
+                </div>
               </div>
-              
-              <button
-                onClick={() => handleCopy(transferContent, 'nd_hero')}
-                className={`px-5 py-3 rounded-xl font-bold text-sm sm:text-base transition-all flex items-center justify-center gap-2 shadow-lg ${
-                  copiedField === 'nd_hero'
-                    ? 'bg-emerald-500 text-black scale-105'
-                    : 'bg-amber-500 hover:bg-amber-400 text-black hover:scale-[1.02] shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                }`}
-              >
-                {copiedField === 'nd_hero' ? (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-black" />
-                    <span>✓ ĐÃ SAO CHÉP!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-5 h-5 text-black" />
-                    <span>BẤM SAO CHÉP NỘI DUNG</span>
-                  </>
-                )}
-              </button>
+
+              <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-200">
+                <Clock className="w-4 h-4 shrink-0 text-blue-400 animate-spin" />
+                <span>
+                  Quá trình kiểm tra và gạch thẻ thường diễn ra từ <strong>10 giây đến 1 phút</strong>. Ngay khi thẻ được duyệt đúng, hệ thống/bot sẽ tự động giao <strong>{order.money_m}M Money</strong> cho bạn!
+                </span>
+              </div>
             </div>
-
-            <p className="text-xs text-amber-200/90 leading-relaxed font-medium">
-              👉 <strong>LƯU Ý QUAN TRỌNG:</strong> Quý khách <strong>PHẢI DÁN ĐÚNG MÃ TRÊN</strong> vào lời nhắn khi chuyển khoản. Hệ thống tự động đọc mã đơn để cộng tiền. Nếu không điền mã đơn, hệ thống sẽ không thể nhận diện được tiền của bạn!
-            </p>
-          </div>
-
-          {/* ═════════════════════════════════════════════════════════════════ */}
-          {/* BƯỚC 2: THANH TOÁN (MÃ QR THUẦN TÚY PHÓNG TO + NÚT TẢI ẢNH)      */}
-          {/* ═════════════════════════════════════════════════════════════════ */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-black flex items-center justify-center">2</span>
-              <h3 className="font-extrabold uppercase text-blue-400 tracking-wide text-sm sm:text-base">
-                BƯỚC 2: THANH TOÁN TIỀN
-              </h3>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              
-              {/* Left Column: QR Code Section (Phóng to cực đại + Nút tải ảnh) */}
-              <div className="flex flex-col items-center gap-3.5 border border-[#1e1e2e] bg-[#0a0a0f] p-4 sm:p-5 rounded-xl">
-                <div className="flex items-center justify-between w-full pb-2 border-b border-[#1e1e2e]">
-                  <div className="flex items-center gap-2">
-                    <QrCode className="w-4 h-4 text-emerald-400" />
-                    <h4 className="font-bold text-zinc-200 text-sm">Mã QR Thanh Toán</h4>
-                  </div>
-
-                  {hasCustomQr && (
-                    <button
-                      onClick={() => setUseCustomQr(!useCustomQr)}
-                      className="text-[11px] font-semibold px-2 py-1 rounded bg-[#1e1e2e] text-zinc-300 hover:text-white border border-[#2a2a3a]"
-                    >
-                      {useCustomQr ? "⚡ Chuyển sang VietQR tự điền" : "🖼️ Xem QR gốc của shop"}
-                    </button>
-                  )}
+          ) : (
+            /* ═════════════════════════════════════════════════════════════════ */
+            /* NẾU LÀ ĐƠN NGÂN HÀNG: VIETQR LÊN ĐẦU TIÊN                        */
+            /* ═════════════════════════════════════════════════════════════════ */
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-emerald-500 text-black text-xs font-black flex items-center justify-center">1</span>
+                  <h3 className="font-extrabold uppercase text-emerald-400 tracking-wide text-sm sm:text-base">
+                    BƯỚC 1: QUÉT MÃ VIETQR HOẶC TẢI ẢNH QR VỀ MÁY
+                  </h3>
                 </div>
 
-                {!useCustomQr && (
-                  <div className="w-full bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg text-center">
-                    <p className="text-xs text-emerald-300 font-semibold flex items-center justify-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-                      <span>Mã VietQR tự động điền sẵn <strong>{formatVND(order.total_vnd)}</strong> & nội dung <strong>{transferNoteForQr}</strong></span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  
+                  {/* Left Column: QR Code Section (Phóng to cực đại + Nút tải ảnh) */}
+                  <div className="flex flex-col items-center gap-3.5 border border-[#1e1e2e] bg-[#0a0a0f] p-4 sm:p-5 rounded-xl">
+                    <div className="flex items-center justify-between w-full pb-2 border-b border-[#1e1e2e]">
+                      <div className="flex items-center gap-2">
+                        <QrCode className="w-4 h-4 text-emerald-400" />
+                        <h4 className="font-bold text-zinc-200 text-sm">Mã VietQR Tự Động</h4>
+                      </div>
+
+                      {hasCustomQr && (
+                        <button
+                          onClick={() => setUseCustomQr(!useCustomQr)}
+                          className="text-[11px] font-semibold px-2 py-1 rounded bg-[#1e1e2e] text-zinc-300 hover:text-white border border-[#2a2a3a]"
+                        >
+                          {useCustomQr ? "⚡ Dùng VietQR tự điền" : "🖼️ Xem QR gốc"}
+                        </button>
+                      )}
+                    </div>
+
+                    {!useCustomQr && (
+                      <div className="w-full bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-lg text-center">
+                        <p className="text-xs text-emerald-300 font-semibold flex items-center justify-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                          <span>Đã điền sẵn <strong>{formatVND(order.total_vnd)}</strong> & nội dung <strong>{transferNoteForQr}</strong></span>
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Khung mã QR phóng to cực đại - Chỉ lấy mã QR thuần túy (qr_only) */}
+                    <div className="bg-white p-3.5 rounded-2xl w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center overflow-hidden shadow-2xl border-4 border-emerald-500/30">
+                      <img 
+                        src={currentQrUrl} 
+                        alt="Mã QR Thanh Toán" 
+                        loading="eager"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+
+                    {/* NÚT TẢI ẢNH QR VỀ MÁY CHO ĐIỆN THOẠI */}
+                    <button
+                      onClick={handleDownloadQr}
+                      disabled={downloading}
+                      className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                        downloadSuccess
+                          ? 'bg-emerald-500 text-black'
+                          : 'bg-[#1e1e2e] hover:bg-emerald-500 hover:text-black text-zinc-200 border border-[#2a2a3a]'
+                      }`}
+                    >
+                      {downloadSuccess ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-black" />
+                          <span>✓ ĐÃ TẢI ẢNH QR VỀ MÁY!</span>
+                        </>
+                      ) : downloading ? (
+                        <span>Đang tải xuống...</span>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          <span>Tải Ảnh Mã QR Về Máy (Mở app ngân hàng quét ảnh)</span>
+                        </>
+                      )}
+                    </button>
+
+                    <p className="text-[11px] text-zinc-500 text-center">
+                      📱 Mở app ngân hàng bất kỳ (Techcombank, MB, VCB...) ➔ Chọn <strong>Quét QR</strong> ➔ Quét mã trên để chuyển tiền tự động.
                     </p>
                   </div>
-                )}
 
-                {/* Khung mã QR phóng to cực đại - Chỉ lấy mã QR thuần túy (qr_only) */}
-                <div className="bg-white p-3.5 rounded-2xl w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center overflow-hidden shadow-2xl border-4 border-emerald-500/30">
-                  <img 
-                    src={currentQrUrl} 
-                    alt="Mã QR Thanh Toán" 
-                    loading="eager"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
+                  {/* Right Column: Manual Transfer Info (Dự phòng) */}
+                  <div className="flex flex-col justify-between border border-[#1e1e2e] bg-[#0a0a0f] p-4 sm:p-5 rounded-xl space-y-3">
+                    <div className="flex items-center gap-2 pb-2 border-b border-[#1e1e2e]">
+                      <Building2 className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-bold text-zinc-200 text-sm">Chuyển Khoản Thủ Công (Dự Phòng)</h4>
+                    </div>
+                    
+                    <div className="space-y-2.5 text-xs sm:text-sm">
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[#12121a]">
+                        <span className="text-zinc-400">Ngân hàng:</span>
+                        <span className="font-semibold text-zinc-200">{settings.bank_name}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[#12121a]">
+                        <span className="text-zinc-400">Số tài khoản:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-emerald-400 text-sm sm:text-base">{settings.bank_account}</span>
+                          <button
+                            onClick={() => handleCopy(settings.bank_account, 'account')}
+                            className="text-xs px-2 py-0.5 rounded bg-[#1e1e2e] hover:bg-[#2a2a3a] text-zinc-300 font-semibold"
+                          >
+                            {copiedField === 'account' ? '✓ Đã chép' : 'Chép'}
+                          </button>
+                        </div>
+                      </div>
 
-                {/* NÚT TẢI ẢNH QR VỀ MÁY CHO ĐIỆN THOẠI */}
-                <button
-                  onClick={handleDownloadQr}
-                  disabled={downloading}
-                  className={`w-full max-w-xs py-3 px-4 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${
-                    downloadSuccess 
-                      ? 'bg-emerald-500 text-black scale-105'
-                      : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-emerald-600/30 hover:scale-[1.02]'
-                  }`}
-                >
-                  {downloadSuccess ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-black" />
-                      <span>✓ ĐÃ LƯU ẢNH VÀO MÁY!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                      <span>{downloading ? "Đang tải ảnh..." : "📥 TẢI MÃ QR VỀ MÁY"}</span>
-                    </>
-                  )}
-                </button>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[#12121a]">
+                        <span className="text-zinc-400">Chủ tài khoản:</span>
+                        <span className="font-semibold text-zinc-200">{settings.bank_owner}</span>
+                      </div>
 
-                {/* Hướng dẫn quét trên cùng 1 điện thoại */}
-                <div className="w-full max-w-xs bg-[#181824] border border-emerald-500/30 p-2.5 rounded-xl text-center space-y-1">
-                  <p className="text-[11px] font-bold text-emerald-400">
-                    📲 Mẹo nạp tiền ngay trên cùng 1 điện thoại:
-                  </p>
-                  <p className="text-[11px] text-zinc-300 leading-tight">
-                    Bấm <strong>&quot;Tải mã QR về máy&quot;</strong> ➔ Mở app ngân hàng bấm <strong>Quét QR</strong> ➔ Chọn biểu tượng <strong>Ảnh / Thư viện</strong> để thanh toán tự động không cần 2 máy!
-                  </p>
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-[#12121a]">
+                        <span className="text-zinc-400">Số tiền:</span>
+                        <span className="font-mono font-bold text-emerald-400 text-sm sm:text-base">{formatVND(order.total_vnd)}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                        <div>
+                          <span className="text-zinc-400 text-xs block">Nội dung CK:</span>
+                          <span className="font-mono font-black text-amber-300 text-sm sm:text-base select-all">
+                            {transferContent}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleCopy(transferContent, 'nd_manual')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            copiedField === 'nd_manual'
+                              ? 'bg-emerald-500 text-black'
+                              : 'bg-amber-500 hover:bg-amber-400 text-black'
+                          }`}
+                        >
+                          {copiedField === 'nd_manual' ? '✓ Đã chép' : 'Chép ND'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1">
+                      <p className="text-[11px] font-bold text-amber-300">
+                        ⚠️ Nếu chuyển khoản thủ công:
+                      </p>
+                      <p className="text-[11px] text-zinc-300 leading-tight">
+                        Vui lòng bấm nút <strong>Chép ND</strong> và dán đúng <strong>{transferContent}</strong> vào lời nhắn chuyển tiền để hệ thống tự động cộng tiền cho bạn!
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Right Column: Manual Transfer Info */}
-              <div className="flex flex-col justify-between border border-[#1e1e2e] bg-[#0a0a0f] p-4 sm:p-5 rounded-xl space-y-3">
-                <div className="flex items-center gap-2 pb-2 border-b border-[#1e1e2e]">
-                  <Building2 className="w-4 h-4 text-emerald-400" />
-                  <h4 className="font-bold text-zinc-200 text-sm">Chuyển Khoản Thủ Công</h4>
-                </div>
-                
-                <div className="space-y-2.5 text-xs sm:text-sm">
-                  {/* Bank Name */}
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-zinc-400">Ngân hàng:</span>
-                    <span className="font-bold text-zinc-200">{settings.bank_name}</span>
-                  </div>
-                  
-                  {/* Account Number */}
-                  <div className="flex justify-between items-center py-1 bg-[#12121a] p-2 rounded-lg border border-[#1e1e2e]">
-                    <span className="text-zinc-400">Số tài khoản:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-emerald-400 text-sm sm:text-base">{settings.bank_account}</span>
-                      <button 
-                        onClick={() => handleCopy(settings.bank_account, 'stk')}
-                        className="px-2 py-1 bg-[#1e1e2e] hover:bg-[#2a2a35] rounded text-xs font-semibold text-zinc-300 hover:text-white transition-colors flex items-center gap-1"
-                        title="Sao chép STK"
-                      >
-                        {copiedField === 'stk' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedField === 'stk' ? 'Đã chép' : 'Chép'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Owner */}
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-zinc-400">Chủ tài khoản:</span>
-                    <span className="font-bold text-zinc-200 uppercase">{settings.bank_owner}</span>
-                  </div>
-
-                  {/* Amount */}
-                  <div className="flex justify-between items-center py-1 bg-[#12121a] p-2 rounded-lg border border-[#1e1e2e]">
-                    <span className="text-zinc-400">Số tiền chuyển:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-emerald-400 text-sm sm:text-base">{formatVND(order.total_vnd)}</span>
-                      <button 
-                        onClick={() => handleCopy(String(order.total_vnd), 'amount')}
-                        className="px-2 py-1 bg-[#1e1e2e] hover:bg-[#2a2a35] rounded text-xs font-semibold text-zinc-300 hover:text-white transition-colors flex items-center gap-1"
-                        title="Sao chép số tiền"
-                      >
-                        {copiedField === 'amount' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedField === 'amount' ? 'Đã chép' : 'Chép'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Transfer Note reminder */}
-                  <div className="flex justify-between items-center py-1 bg-amber-500/10 p-2 rounded-lg border border-amber-500/30">
-                    <span className="text-amber-400 font-semibold">Nội dung CK:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-amber-300 text-sm sm:text-base">{transferContent}</span>
-                      <button 
-                        onClick={() => handleCopy(transferContent, 'nd_row')}
-                        className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded text-xs font-bold text-amber-300 transition-colors flex items-center gap-1"
-                        title="Sao chép nội dung"
-                      >
-                        {copiedField === 'nd_row' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedField === 'nd_row' ? 'Đã chép' : 'Chép'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 text-[11px] text-zinc-500 flex items-center gap-1">
-                  <span>💡 Bạn có thể bấm nút [Chép] ở từng dòng để dán nhanh vào app ngân hàng.</span>
+              {/* BẮT BUỘC CHỤP LẠI MÀN HÌNH CHUYỂN KHOẢN */}
+              <div className="border border-amber-500/30 bg-amber-500/10 p-4 rounded-xl flex items-start gap-3">
+                <Camera className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs sm:text-sm">
+                  <p className="font-extrabold uppercase text-amber-400 tracking-wide">
+                    📸 BẮT BUỘC CHỤP LẠI MÀN HÌNH CHUYỂN KHOẢN THÀNH CÔNG:
+                  </p>
+                  <p className="text-zinc-300 leading-relaxed text-xs">
+                    Sau khi chuyển tiền, <strong>quý khách vui lòng CHỤP LẠI MÀN HÌNH giao dịch chuyển khoản thành công</strong>. Trong trường hợp ngân hàng bị nghẽn mạng, delay hoặc bạn ghi nhầm nội dung, chỉ cần gửi ảnh chụp thanh toán vào Ticket là Admin sẽ hỗ trợ giải quyết ngay!
+                  </p>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* ═════════════════════════════════════════════════════════════════ */}
-          {/* LƯU Ý BẮT BUỘC CHỤP MÀN HÌNH GIAO DỊCH                           */}
-          {/* ═════════════════════════════════════════════════════════════════ */}
-          <div className="border border-amber-500/60 bg-gradient-to-r from-amber-500/10 via-[#1a1820] to-[#12121a] p-3.5 sm:p-4 rounded-xl flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
-              <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-            <div className="space-y-1 text-xs sm:text-sm">
-              <p className="font-extrabold uppercase text-amber-400 tracking-wide">
-                📸 BẮT BUỘC CHỤP LẠI MÀN HÌNH CHUYỂN KHOẢN THÀNH CÔNG:
-              </p>
-              <p className="text-zinc-300 leading-relaxed text-xs">
-                Sau khi chuyển tiền, <strong>quý khách vui lòng CHỤP LẠI MÀN HÌNH giao dịch chuyển khoản thành công</strong>. Trong trường hợp ngân hàng bị nghẽn mạng, delay hoặc bạn ghi nhầm nội dung, chỉ cần gửi ảnh chụp thanh toán vào Ticket là Admin sẽ hỗ trợ giải quyết ngay!
-              </p>
-            </div>
-          </div>
         </div>
 
         {/* Modal Footer */}
@@ -424,30 +413,33 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
             >
               Đóng
             </button>
-            <button 
-              onClick={() => setShowConfirmModal(true)}
-              disabled={loading || success}
-              className={`px-6 py-2.5 font-bold rounded-lg transition-all order-1 sm:order-2 flex items-center justify-center gap-2 text-sm shadow-[0_0_15px_rgba(245,158,11,0.2)] ${
-                success 
-                  ? 'bg-emerald-500 text-black' 
-                  : 'bg-amber-500 hover:bg-amber-400 text-black hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]'
-              }`}
-            >
-              {success ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  ĐÃ XÁC NHẬN THANH TOÁN!
-                </>
-              ) : (
-                "Xác Nhận Đã Thanh Toán ✓"
-              )}
-            </button>
+            
+            {!isCard && (
+              <button 
+                onClick={() => setShowConfirmModal(true)}
+                disabled={loading || success}
+                className={`px-6 py-2.5 font-bold rounded-lg transition-all order-1 sm:order-2 flex items-center justify-center gap-2 text-sm shadow-[0_0_15px_rgba(245,158,11,0.2)] ${
+                  success 
+                    ? 'bg-emerald-500 text-black' 
+                    : 'bg-amber-500 hover:bg-amber-400 text-black hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]'
+                }`}
+              >
+                {success ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    ĐÃ XÁC NHẬN THANH TOÁN!
+                  </>
+                ) : (
+                  "Xác Nhận Đã Thanh Toán ✓"
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* ═════════════════════════════════════════════════════════════════ */}
-      {/* POPUP BẢO VỆ CHỐNG BẤM NHẦM (CONFIRMATION GUARD)                  */}
+      {/* POPUP BẢO VỆ CHỐNG BẤM NHẦM (CONFIRMATION GUARD CHO BANK)         */}
       {/* ═════════════════════════════════════════════════════════════════ */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">

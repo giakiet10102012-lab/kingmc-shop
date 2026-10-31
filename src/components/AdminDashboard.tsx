@@ -30,9 +30,12 @@ import {
   Copy,
   Terminal,
   ExternalLink,
-  Activity
+  Activity,
+  CreditCard,
+  Eye,
+  EyeOff
 } from 'lucide-react';
-import { Order, ShopSettings, BankLog } from '@/lib/types';
+import { Order, ShopSettings, BankLog, CardLog } from '@/lib/types';
 import { cn, formatNumber, formatVND, getStatusColor, getStatusLabel } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import OrderTicketModal from './OrderTicketModal';
@@ -70,7 +73,89 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     money_stock: 1000
   });
 
-  const [activeMainSection, setActiveMainSection] = useState<'orders' | 'bank_logs' | 'settings'>('orders');
+  const [activeMainSection, setActiveMainSection] = useState<'orders' | 'bank_logs' | 'card_logs' | 'settings'>('orders');
+  
+  // Card logs states
+  const [cardLogs, setCardLogs] = useState<CardLog[]>([]);
+  const [isRefreshingCardLogs, setIsRefreshingCardLogs] = useState(false);
+  const [copiedCardWebhook, setCopiedCardWebhook] = useState(false);
+  const [showCardPins, setShowCardPins] = useState<Record<string, boolean>>({});
+
+  // Fetch card logs
+  const fetchCardLogs = async () => {
+    setIsRefreshingCardLogs(true);
+    try {
+      const res = await fetch('/api/webhook/card', { headers: { 'x-admin-pin': pin.trim() } });
+      if (res.ok) {
+        const data = await res.json();
+        setCardLogs(Array.isArray(data.logs) ? data.logs : []);
+      }
+    } catch (e) {
+      console.error('Fetch card logs error:', e);
+    } finally {
+      setIsRefreshingCardLogs(false);
+    }
+  };
+
+  // Duyệt hoặc từ chối thẻ thủ công
+  const handleCardAction = async (logId: string, action: 'approve' | 'reject') => {
+    const confirmMsg = action === 'approve'
+      ? 'Bạn có chắc chắn muốn DUYỆT THẺ NÀY hợp lệ? Đơn hàng sẽ được chuyển sang trạng thái ĐÃ THANH TOÁN (paid_waiting) và trừ kho tương ứng để bot giao hàng.'
+      : 'Bạn có chắc chắn muốn TỪ CHỐI THẺ NÀY? Đơn hàng tương ứng sẽ bị hủy.';
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch('/api/webhook/card', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-pin': pin.trim() },
+        body: JSON.stringify({ log_id: logId, action })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || 'Cập nhật thẻ thành công!');
+        fetchCardLogs();
+        fetchOrders();
+        fetchSettings();
+      } else {
+        alert(data.error || 'Lỗi xử lý thẻ');
+      }
+    } catch {
+      alert('Lỗi kết nối khi cập nhật thẻ');
+    }
+  };
+
+  // Xóa log thẻ
+  const handleDeleteCardLog = async (logId: string) => {
+    if (!window.confirm('Bạn có chắc muốn xóa bản ghi thẻ này?')) return;
+    try {
+      const res = await fetch(`/api/webhook/card?id=${logId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-pin': pin.trim() }
+      });
+      if (res.ok) {
+        setCardLogs(prev => prev.filter(l => l.id !== logId));
+      }
+    } catch {
+      alert('Lỗi khi xóa log thẻ');
+    }
+  };
+
+  // Xóa toàn bộ log thẻ
+  const handleClearAllCardLogs = async () => {
+    if (!window.confirm('Bạn có chắc muốn XÓA TẤT CẢ nhật ký thẻ cào?')) return;
+    try {
+      const res = await fetch('/api/webhook/card', {
+        method: 'DELETE',
+        headers: { 'x-admin-pin': pin.trim() }
+      });
+      if (res.ok) {
+        setCardLogs([]);
+        alert('Đã xóa toàn bộ nhật ký thẻ cào!');
+      }
+    } catch {
+      alert('Lỗi khi xóa');
+    }
+  };
   const [activeTab, setActiveTab] = useState<'all' | 'paid_waiting' | 'pending' | 'completed' | 'cancelled' | 'hidden'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [cancelDropdown, setCancelDropdown] = useState<string | null>(null);
@@ -273,6 +358,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     fetchHiddenOrders();
     fetchSettings();
     fetchBankLogs();
+    fetchCardLogs();
 
     // Supabase Realtime subscription
     const channel = supabase.channel('admin-realtime')
@@ -284,6 +370,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_configs' }, () => {
         fetchSettings();
         fetchBankLogs();
+        fetchCardLogs();
       })
       .subscribe();
 
@@ -565,19 +652,19 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
           </button>
         </div>
 
-        {/* 3 TOP-LEVEL WORKSPACE TABS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-1.5 rounded-2xl bg-[#12121a] border border-[#1e1e2e]">
+        {/* 4 TOP-LEVEL WORKSPACE TABS */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-1.5 rounded-2xl bg-[#12121a] border border-[#1e1e2e]">
           <button
             onClick={() => setActiveMainSection('orders')}
             className={cn(
-              "flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-bold transition-all",
+              "flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all",
               activeMainSection === 'orders'
                 ? "bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.3)]"
                 : "text-zinc-400 hover:text-white hover:bg-[#1a1a28]"
             )}
           >
-            <ShoppingBag size={18} />
-            <span>Quản Lý Đơn Hàng</span>
+            <ShoppingBag size={17} />
+            <span>Quản Lý Đơn</span>
             {stats.waitingAdmin > 0 && (
               <span className={cn(
                 "px-2 py-0.5 rounded-full text-xs font-black",
@@ -594,14 +681,14 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
               fetchBankLogs();
             }}
             className={cn(
-              "flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-bold transition-all relative",
+              "flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all relative",
               activeMainSection === 'bank_logs'
                 ? "bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.3)]"
                 : "text-zinc-400 hover:text-white hover:bg-[#1a1a28]"
             )}
           >
-            <Activity size={18} />
-            <span>Nhật Ký Ngân Hàng</span>
+            <Activity size={17} />
+            <span>Nhật Ký Bank</span>
             {bankLogs.length > 0 && (
               <span className={cn(
                 "px-2 py-0.5 rounded-full text-xs font-black",
@@ -613,16 +700,40 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
           </button>
 
           <button
+            onClick={() => {
+              setActiveMainSection('card_logs');
+              fetchCardLogs();
+            }}
+            className={cn(
+              "flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all relative",
+              activeMainSection === 'card_logs'
+                ? "bg-amber-500 text-black shadow-[0_0_20px_rgba(245,158,11,0.3)]"
+                : "text-zinc-400 hover:text-white hover:bg-[#1a1a28]"
+            )}
+          >
+            <CreditCard size={17} />
+            <span>Nhật Ký Thẻ Cào</span>
+            {cardLogs.filter(c => c.status === 'pending').length > 0 && (
+              <span className={cn(
+                "px-2 py-0.5 rounded-full text-xs font-black",
+                activeMainSection === 'card_logs' ? "bg-black text-white" : "bg-amber-500 text-black animate-pulse"
+              )}>
+                {cardLogs.filter(c => c.status === 'pending').length}
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveMainSection('settings')}
             className={cn(
-              "flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl text-sm font-bold transition-all",
+              "flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all",
               activeMainSection === 'settings'
                 ? "bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.3)]"
                 : "text-zinc-400 hover:text-white hover:bg-[#1a1a28]"
             )}
           >
-            <Settings size={18} />
-            <span>Cài Đặt Shop & Discord</span>
+            <Settings size={17} />
+            <span>Cài Đặt Shop</span>
           </button>
         </div>
 
@@ -824,6 +935,241 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                               Bấm nút &ldquo;Gửi Test Giả Lập&rdquo; ở trên để thử nghiệm hệ thống.
                             </p>
                           </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SECTION 3: CARD TRANSACTION LOGS */}
+        {activeMainSection === 'card_logs' && (
+          <div className="space-y-6">
+            {/* Top Control & Webhook Info Card */}
+            <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] p-6 shadow-xl space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1e1e2e] pb-5">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2.5">
+                    <CreditCard className="text-amber-400" size={22} />
+                    <span>Nhật Ký Thẻ Cào & Gạch Thẻ Tự Động</span>
+                  </h2>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Theo dõi danh sách thẻ cào khách nạp: Hệ thống tự động gạch thẻ qua API Doithe1s/Thesieuto hoặc duyệt thủ công.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={fetchCardLogs}
+                    disabled={isRefreshingCardLogs}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#0a0a0f] hover:bg-[#1e1e2e] border border-[#1e1e2e] text-zinc-300 text-xs font-medium transition-colors"
+                  >
+                    <RefreshCw size={14} className={cn(isRefreshingCardLogs && "animate-spin text-amber-400")} />
+                    <span>Làm mới log</span>
+                  </button>
+
+                  {cardLogs.length > 0 && (
+                    <button
+                      onClick={handleClearAllCardLogs}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500 hover:text-white border border-red-500/30 text-red-400 text-xs font-medium transition-colors"
+                    >
+                      <Trash2 size={14} />
+                      <span>Xóa hết</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Webhook Endpoint & Stats */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2 rounded-xl bg-[#0a0a0f] border border-[#1e1e2e] p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                      <Terminal size={14} /> Link Callback Webhook Gạch Thẻ Cào:
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText('https://kingmc-shop.vercel.app/api/webhook/card');
+                        setCopiedCardWebhook(true);
+                        setTimeout(() => setCopiedCardWebhook(false), 2500);
+                      }}
+                      className="flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:underline"
+                    >
+                      <Copy size={12} />
+                      <span>{copiedCardWebhook ? "Đã copy link ✓" : "Sao chép link Webhook"}</span>
+                    </button>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-[#12121a] border border-[#1e1e2e] font-mono text-xs text-amber-300 break-all select-all">
+                    https://kingmc-shop.vercel.app/api/webhook/card
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    💡 Cấu hình link này vào mục <strong>Webhook Callback</strong> trên website đổi thẻ (Doithe1s.vn / Thesieuto.net) để hệ thống tự động nhận kết quả duyệt thẻ 24/24!
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-[#0a0a0f] border border-[#1e1e2e] p-3 text-center flex flex-col justify-center">
+                    <span className="text-zinc-500 text-[10px] uppercase font-bold">Tổng Thẻ</span>
+                    <span className="text-xl font-black text-white">{cardLogs.length}</span>
+                  </div>
+                  <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 text-center flex flex-col justify-center">
+                    <span className="text-amber-400 text-[10px] uppercase font-bold">Chờ Duyệt</span>
+                    <span className="text-xl font-black text-amber-300">{cardLogs.filter(c => c.status === 'pending').length}</span>
+                  </div>
+                  <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3 text-center flex flex-col justify-center">
+                    <span className="text-emerald-400 text-[10px] uppercase font-bold">Thành Công</span>
+                    <span className="text-xl font-black text-emerald-400">{cardLogs.filter(c => c.status === 'success').length}</span>
+                  </div>
+                  <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-center flex flex-col justify-center">
+                    <span className="text-red-400 text-[10px] uppercase font-bold">Lỗi / Sai Thẻ</span>
+                    <span className="text-xl font-black text-red-400">{cardLogs.filter(c => c.status === 'invalid' || c.status === 'wrong_amount').length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Danh sách thẻ cào */}
+            <div className="rounded-2xl border border-[#1e1e2e] bg-[#12121a] shadow-xl overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-[#1e1e2e] flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="text-amber-400" size={18} />
+                  <h3 className="font-bold text-white text-sm sm:text-base">
+                    Danh Sách Thẻ Cào Đã Nạp ({cardLogs.length})
+                  </h3>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                  <thead>
+                    <tr className="border-b border-[#1e1e2e] bg-[#0a0a0f] text-zinc-400 uppercase text-[10px] tracking-wider font-semibold">
+                      <th className="py-3 px-4">Thời Gian</th>
+                      <th className="py-3 px-4">Đơn / IGN</th>
+                      <th className="py-3 px-4">Nhà Mạng & Mệnh Giá</th>
+                      <th className="py-3 px-4">Mã Thẻ (PIN) / Seri</th>
+                      <th className="py-3 px-4">Thực Nhận</th>
+                      <th className="py-3 px-4">Trạng Thái</th>
+                      <th className="py-3 px-4 text-right">Thao Tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1e1e2e]">
+                    {cardLogs.length > 0 ? (
+                      cardLogs.map((c) => {
+                        const isPinVisible = showCardPins[c.id];
+                        return (
+                          <tr key={c.id} className="hover:bg-[#161622] transition-colors">
+                            <td className="py-3.5 px-4 text-zinc-400 font-mono text-[11px] whitespace-nowrap">
+                              {new Date(c.timestamp).toLocaleString('vi-VN')}
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="font-bold font-mono text-amber-300 block">#{c.order_id}</span>
+                              <span className="text-zinc-300 text-xs">{c.ign}</span>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="font-bold text-white block">{c.telco}</span>
+                              <span className="font-mono text-zinc-400 text-xs">{formatVND(c.declared_value)}</span>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-zinc-300">
+                                  {isPinVisible ? c.code : '••••••••••••'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCardPins(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
+                                  className="text-zinc-500 hover:text-zinc-300 p-0.5"
+                                  title={isPinVisible ? "Ẩn mã thẻ" : "Hiện mã thẻ"}
+                                >
+                                  {isPinVisible ? <EyeOff size={13} /> : <Eye size={13} />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => navigator.clipboard.writeText(c.code)}
+                                  className="text-zinc-500 hover:text-amber-400 p-0.5"
+                                  title="Sao chép mã thẻ"
+                                >
+                                  <Copy size={13} />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                                <span>Seri: {c.serial}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => navigator.clipboard.writeText(c.serial)}
+                                  className="hover:text-amber-400 p-0.5"
+                                  title="Sao chép seri"
+                                >
+                                  <Copy size={11} />
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              <span className="font-bold text-emerald-400 block">{formatVND(c.real_value || c.declared_value * 0.8)}</span>
+                              <span className="text-zinc-500 text-[11px]">Đã trừ chiết khấu</span>
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              {c.status === 'success' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  <CheckCircle2 size={12} />
+                                  <span>Thành công</span>
+                                </span>
+                              ) : c.status === 'pending' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                                  <Clock size={12} />
+                                  <span>Chờ duyệt</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                  <XCircle size={12} />
+                                  <span>{c.status === 'wrong_amount' ? 'Sai mệnh giá' : 'Thẻ lỗi / sai'}</span>
+                                </span>
+                              )}
+                              {c.message && (
+                                <p className="text-[10px] text-zinc-500 mt-0.5 max-w-[150px] truncate" title={c.message}>
+                                  {c.message}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {c.status === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleCardAction(c.id, 'approve')}
+                                      className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500 hover:text-black border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all"
+                                      title="Duyệt thẻ hợp lệ và xác nhận thanh toán đơn hàng"
+                                    >
+                                      ✓ Duyệt
+                                    </button>
+                                    <button
+                                      onClick={() => handleCardAction(c.id, 'reject')}
+                                      className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500 hover:text-white border border-red-500/40 text-red-300 text-xs font-bold transition-all"
+                                      title="Từ chối thẻ (thẻ sai hoặc đã nạp)"
+                                    >
+                                      ✕ Từ Chối
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteCardLog(c.id)}
+                                  className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                  title="Xóa log này"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-zinc-500">
+                          <CreditCard className="mx-auto mb-2 opacity-30" size={36} />
+                          <p className="text-sm">Chưa có giao dịch nạp thẻ cào nào được ghi nhận.</p>
                         </td>
                       </tr>
                     )}
@@ -1144,6 +1490,65 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                   />
                   <p className="text-[11px] text-zinc-500">
                     💡 Khi có khách chuyển tiền ngân hàng hoặc hệ thống tự động khớp đơn, một thông báo chi tiết sẽ được gửi ngay lập tức vào kênh Discord này để bạn đọc log mọi lúc mọi nơi trên điện thoại!
+                  </p>
+                </div>
+
+                {/* Cấu hình Gạch Thẻ Cào Tự Động */}
+                <div className="space-y-3 pt-4 border-t border-[#1e1e2e]">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-amber-400 flex items-center gap-2">
+                      <CreditCard size={16} />
+                      <span>Cấu hình Gạch Thẻ Cào Tự Động 24/24 (Doithe1s.vn / Thesieuto.net)</span>
+                    </label>
+                    <span className="text-[11px] text-zinc-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
+                      Kết nối API
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">Partner ID (Mã đối tác)</label>
+                      <input
+                        type="text"
+                        value={settings.card_partner_id || ''}
+                        onChange={e => setSettings({ ...settings, card_partner_id: e.target.value.trim() })}
+                        placeholder="VD: 123456"
+                        className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">Partner Key (Khóa bảo mật)</label>
+                      <input
+                        type="password"
+                        value={settings.card_partner_key || ''}
+                        onChange={e => setSettings({ ...settings, card_partner_key: e.target.value.trim() })}
+                        placeholder="Dán Partner Key vào đây..."
+                        className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">Chiết khấu thẻ cào (%)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          max="50"
+                          value={settings.card_discount_percent !== undefined ? settings.card_discount_percent : 20}
+                          onChange={e => setSettings({ ...settings, card_discount_percent: Number(e.target.value) })}
+                          placeholder="20"
+                          className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-bold text-amber-400 outline-none focus:border-amber-500"
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 font-bold">
+                          %
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-zinc-500">
+                    💡 Đăng ký tài khoản tại doithe1s.vn hoặc thesieuto.net, vào mục Kết Nối API điền Callback Webhook là: <code className="text-amber-300">https://kingmc-shop.vercel.app/api/webhook/card</code>. Sau đó dán Partner ID & Key vào đây để hệ thống tự động gạch thẻ!
                   </p>
                 </div>
 

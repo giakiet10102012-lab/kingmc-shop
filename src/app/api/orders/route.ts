@@ -79,6 +79,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    if (Number(total_vnd) < 5000) {
+      return NextResponse.json({ error: 'Hệ thống chỉ nhận giao dịch từ 5.000 VNĐ trở lên' }, { status: 400 });
+    }
+
     const supabase = getServiceClient();
     if (!supabase) {
       return NextResponse.json({ error: 'Chưa cấu hình Supabase URL hoặc Key trên Vercel.' }, { status: 500 });
