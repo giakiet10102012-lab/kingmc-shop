@@ -123,20 +123,23 @@ function extractAmountFromText(text: string): number {
     const num = Number(match[1].replace(/[.,]/g, ''));
     if (!isNaN(num) && num > 0) return num;
   }
+  // Loại bỏ phần "Số dư" để tránh đọc nhầm số dư tài khoản
+  const sanitized = text.replace(/(?:số\s*dư|so\s*du|sd)\s*:?\s*(?:vnd|vnđ|đ)?\s*[\d.,]+/gi, '');
+
   // 2. Chữ VND/đ đứng trước số: ví dụ VND 3,000 hoặc VND 50.000
-  match = text.match(/(?:vnd|vnđ|đ)\s*([\d.,]+)/i);
+  match = sanitized.match(/(?:vnd|vnđ|đ)\s*([\d.,]+)/i);
   if (match) {
     const num = Number(match[1].replace(/[.,]/g, ''));
     if (!isNaN(num) && num > 0) return num;
   }
   // 3. Số đứng trước VND/đ: ví dụ 50.000d hoặc 50,000 VND hoặc 3000 VNĐ
-  match = text.match(/([\d.,]+)\s*(?:đ|vnd|vnđ)\b/i);
+  match = sanitized.match(/([\d.,]+)\s*(?:đ|vnd|vnđ)\b/i);
   if (match) {
     const num = Number(match[1].replace(/[.,]/g, ''));
     if (!isNaN(num) && num > 0) return num;
   }
   // 4. Từ khóa nhận/tăng/cộng số tiền (ZaloPay)
-  match = text.match(/(?:nhan|nhận|tang|tăng|cong|cộng|duoc|được|tien|tiền|gia|giá|gd)\s*(?:duoc|được)?\s*:?\s*(?:vnd|vnđ|đ)?\s*([\d.,]+)/i);
+  match = sanitized.match(/(?:nhan|nhận|tang|tăng|cong|cộng|duoc|được|tien|tiền|gia|giá|gd)\s*(?:duoc|được)?\s*:?\s*(?:vnd|vnđ|đ)?\s*([\d.,]+)/i);
   if (match) {
     const num = Number(match[1].replace(/[.,]/g, ''));
     if (!isNaN(num) && num > 0) return num;
@@ -207,14 +210,53 @@ export async function POST(req: Request) {
     }
     // Trường hợp 4: Generic / MacroDroid / Custom JSON / Plain Text
     else {
-      content = String(body.content || body.description || body.text || body.message || rawText || '');
+      const rawParts = [
+        body.content,
+        body.description,
+        body.text,
+        body.message,
+        body.notification,
+        body.title,
+        body.body,
+        rawText
+      ].filter(Boolean);
+      content = rawParts.join(' ').trim();
       amount = Number(body.amount) || Number(body.total_vnd) || extractAmountFromText(content);
-      gateway = String(body.gateway || body.bank || body.app || 'Bank');
+      gateway = String(body.gateway || body.bank || body.app || body.package || 'Techcombank');
       referenceCode = String(body.id || body.code || body.ref || referenceCode);
     }
 
     // 2. Tìm mã đơn hàng từ nội dung
-    const extractedId = extractOrderId(content);
+    let extractedId = extractOrderId(content);
+
+    // Fallback thông minh: Nếu không có KMC-XXXX nhưng có ghi Tên Ingame (IGN) khớp đơn gần đây
+    if (!extractedId && amount > 0) {
+      try {
+        const { data: recentOrders } = await supabase
+          .from('orders')
+          .select('*')
+          .in('status', ['pending', 'paid_waiting'])
+          .order('created_at', { ascending: false })
+          .limit(30);
+
+        if (recentOrders && recentOrders.length > 0) {
+          const contentLower = content.toLowerCase();
+          const candidate = recentOrders.find((ord: any) => {
+            if (!ord.ign || ord.ign.trim().length < 2) return false;
+            const ignLower = ord.ign.trim().toLowerCase();
+            const hasIgn = contentLower.includes(ignLower);
+            const matchesAmount = Math.abs(Number(ord.total_vnd) - amount) <= 500;
+            return hasIgn && matchesAmount;
+          });
+
+          if (candidate) {
+            extractedId = candidate.id;
+          }
+        }
+      } catch (e) {
+        console.warn('Fallback match by IGN warning:', e);
+      }
+    }
     let matchedOrder: any = null;
     let logStatus: 'matched' | 'underpaid' | 'unmatched' = 'unmatched';
     let logNote = '';
@@ -284,7 +326,17 @@ export async function POST(req: Request) {
               `• Trạng thái: **Đã duyệt thanh toán -> Chờ giao hàng**`
             );
           } else {
-            logNote = `Đơn #${order.id} đã được xác nhận trước đó (trạng thái: ${order.status})`;
+            logNote = `Đơn #${order.id} đã được khách/admin xác nhận trước đó (trạng thái: ${order.status})`;
+
+            // Bắn tin báo tiền về tài khoản ngân hàng cho Admin
+            await sendDiscordNotification(
+              adminDiscordWebhook,
+              `🎉 **[BIẾN ĐỘNG SỐ DƯ - TIỀN ĐÃ VỀ TÀI KHOẢN]**\n` +
+              `• Mã đơn: **#${order.id}** (${order.ign})\n` +
+              `• Số tiền: **${formatVND(amount)}** (Mã GD: \`${referenceCode}\`)\n` +
+              `• Trạng thái hiện tại: **${order.status}**\n` +
+              `• Đơn hàng đã có tiền thực tế về tài khoản ngân hàng!`
+            );
           }
         } else {
           logStatus = 'underpaid';
