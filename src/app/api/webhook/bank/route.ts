@@ -114,15 +114,26 @@ function extractOrderId(text: string): string | null {
   return null;
 }
 
-// Trích xuất số tiền nếu payload là chuỗi text
+// Trích xuất số tiền nếu payload là chuỗi text (Hỗ trợ Techcombank, ZaloPay, MBBank...)
 function extractAmountFromText(text: string): number {
   if (!text) return 0;
-  // Tìm số tiền ví dụ: +50,000 hoặc 50000 hoặc 50.000
-  const match = text.match(/(?:\+|\b)(\d[\d.,]*)\s*(?:đ|vnd|vnđ)?/i);
+  // 1. Kiểm tra dấu cộng số tiền: ví dụ +50,000 hoặc +50.000 hoặc + 50000
+  let match = text.match(/\+\s*([\d.,]+)\s*(?:đ|vnd|vnđ)?/i);
   if (match) {
-    const cleaned = match[1].replace(/[.,]/g, '');
-    const num = Number(cleaned);
-    if (!isNaN(num)) return num;
+    const num = Number(match[1].replace(/[.,]/g, ''));
+    if (!isNaN(num) && num > 0) return num;
+  }
+  // 2. Kiểm tra từ khóa nhận/tăng/cộng số tiền (ZaloPay: Ban da nhan duoc 50.000d)
+  match = text.match(/(?:nhan|nhận|tang|tăng|cong|cộng|duoc|được|tien|tiền|gia|giá)\s*(?:duoc|được)?\s*:?\s*([\d.,]+)\s*(?:đ|vnd|vnđ)?/i);
+  if (match) {
+    const num = Number(match[1].replace(/[.,]/g, ''));
+    if (!isNaN(num) && num > 0) return num;
+  }
+  // 3. Kiểm tra số tiền kèm đơn vị đ/vnd/vnđ phía sau
+  match = text.match(/([\d.,]+)\s*(?:đ|vnd|vnđ)\b/i);
+  if (match) {
+    const num = Number(match[1].replace(/[.,]/g, ''));
+    if (!isNaN(num) && num > 0) return num;
   }
   return 0;
 }
