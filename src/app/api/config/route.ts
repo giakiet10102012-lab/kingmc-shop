@@ -14,7 +14,8 @@ const DEFAULT_SETTINGS: ShopSettings = {
   money_stock: 1000,
   card_partner_id: '',
   card_partner_key: '',
-  card_discount_percent: 20
+  card_discount_percent: 20,
+  card_gateway_url: 'https://thesieure.com/chargingws/v2'
 };
 
 // Global in-memory cache fallback in case Supabase is unavailable

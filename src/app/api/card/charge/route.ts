@@ -16,32 +16,6 @@ const getServiceClient = () => {
 
 const generateOrderId = () => `KMC-${Math.floor(1000 + Math.random() * 9000)}`;
 
-// Hàm điều chỉnh kho
-async function adjustStock(supabase: any, delta: number): Promise<number | null> {
-  try {
-    const { data: stockRow } = await supabase
-      .from('app_configs')
-      .select('value')
-      .eq('key', 'money_stock')
-      .maybeSingle();
-
-    let currentStock = 1000;
-    if (stockRow && stockRow.value !== undefined && stockRow.value !== null && !isNaN(Number(stockRow.value))) {
-      currentStock = Number(stockRow.value);
-    }
-
-    const newStock = Math.max(0, currentStock + delta);
-    await supabase.from('app_configs').upsert(
-      { key: 'money_stock', value: String(newStock), updated_at: new Date().toISOString() },
-      { onConflict: 'key' }
-    );
-    return newStock;
-  } catch (err) {
-    console.error('adjustStock error:', err);
-    return null;
-  }
-}
-
 // Bắn thông báo về Discord Webhook Admin
 async function sendDiscordNotification(webhookUrl: string | undefined, message: string) {
   if (!webhookUrl || !webhookUrl.startsWith('http')) return;
@@ -75,7 +49,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Mệnh giá thẻ tối thiểu là 10.000 VNĐ' }, { status: 400 });
     }
 
-    // 1. Đọc cấu hình shop (tỷ giá, chiết khấu thẻ cào, partner id/key)
+    // 1. Đọc cấu hình shop (tỷ giá, chiết khấu thẻ cào, partner id/key, gateway url)
     const { data: configs } = await supabase.from('app_configs').select('*');
     const configMap = new Map<string, string>();
     if (configs) {
@@ -84,8 +58,9 @@ export async function POST(req: Request) {
 
     const ratePerM = Number(configMap.get('rate_per_m') || '50');
     const discountPercent = Number(configMap.get('card_discount_percent') || '20'); // Mặc định chiết khấu 20%
-    const partnerId = configMap.get('card_partner_id') || '';
-    const partnerKey = configMap.get('card_partner_key') || '';
+    const partnerId = (configMap.get('card_partner_id') || '').trim();
+    const partnerKey = (configMap.get('card_partner_key') || '').trim();
+    const gatewayUrl = (configMap.get('card_gateway_url') || 'https://thesieure.com/chargingws/v2').trim();
     const adminDiscordWebhook = configMap.get('discord_webhook_url');
 
     // 2. Tính số tiền thực nhận sau chiết khấu và số Money
@@ -178,34 +153,63 @@ export async function POST(req: Request) {
       updated_at: new Date().toISOString()
     }, { onConflict: 'key' });
 
-    // 4. Nếu đã cấu hình Partner ID & Key -> Gọi API gạch thẻ tự động (Doithe1s/Thesieuto chuẩn API)
+    // 4. Nếu đã cấu hình Partner ID & Key -> Gọi API gạch thẻ tự động (TheSieuRe.com)
     let apiSubmitted = false;
     let apiMessage = '';
 
     if (partnerId && partnerKey) {
       try {
-        const sign = crypto.createHash('md5').update(`${partnerKey}${code}${serial}`).digest('hex');
-        const apiRes = await fetch('https://doithe1s.vn/chargingws/v2', {
+        const cleanCode = String(code).trim();
+        const cleanSerial = String(serial).trim();
+        const normalizedTelco = String(telco).toUpperCase() === 'VIETNAMOBILE' ? 'VNMOBI' : String(telco).toUpperCase();
+        const command = 'charging';
+
+        // Chữ ký MD5 theo chuẩn TheSieuRe:
+        // sign = md5(partner_key + code + command + partner_id + request_id + serial + telco)
+        const signTheSieuRe = crypto
+          .createHash('md5')
+          .update(`${partnerKey}${cleanCode}${command}${partnerId}${orderId}${cleanSerial}${normalizedTelco}`)
+          .digest('hex');
+
+        // Chữ ký MD5 dự phòng nếu Admin dùng Doithe1s
+        const signDoithe1s = crypto
+          .createHash('md5')
+          .update(`${partnerKey}${cleanCode}${cleanSerial}`)
+          .digest('hex');
+
+        const sign = gatewayUrl.includes('doithe1s') ? signDoithe1s : signTheSieuRe;
+
+        const postData = {
+          telco: normalizedTelco,
+          code: cleanCode,
+          serial: cleanSerial,
+          amount: String(declaredAmount),
+          request_id: orderId,
+          partner_id: partnerId,
+          command: command,
+          sign: sign
+        };
+
+        const formParams = new URLSearchParams();
+        Object.entries(postData).forEach(([k, v]) => formParams.append(k, v));
+
+        // TheSieuRe ưu tiên application/x-www-form-urlencoded
+        const apiRes = await fetch(gatewayUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telco: String(telco).toUpperCase(),
-            code: String(code).trim(),
-            serial: String(serial).trim(),
-            amount: declaredAmount,
-            request_id: orderId,
-            partner_id: partnerId,
-            sign: sign
-          })
+          headers: { 
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+          },
+          body: formParams.toString()
         });
 
         const apiData = await apiRes.json().catch(() => null);
         if (apiData) {
           apiSubmitted = true;
-          apiMessage = apiData.message || (apiData.status === 99 ? 'Thẻ đang chờ duyệt' : 'Đã gửi');
+          apiMessage = apiData.message || (apiData.status === 99 ? 'Thẻ đang chờ duyệt' : `Status: ${apiData.status}`);
         }
       } catch (callErr: any) {
-        console.warn('Call charging API error:', callErr);
+        console.warn('Call TheSieuRe charging API error:', callErr);
       }
     }
 
@@ -219,7 +223,7 @@ export async function POST(req: Request) {
       `• Số Seri: \`${serial}\`\n` +
       `• Thực nhận (-${discountPercent}%): **${formatVND(realVND)}** ➔ **+${moneyM}M Money**\n` +
       `• Hình thức nhận: **${method === 'pay' ? '⚡ PAY TIỀN' : '🏪 MUA /AH'}**\n` +
-      `• Trạng thái API: ${apiSubmitted ? `Đã gửi API (${apiMessage})` : 'Chờ Admin duyệt thủ công'}`
+      `• Cổng xử lý: **TheSieuRe.com** (${apiSubmitted ? `Đã gửi API: ${apiMessage}` : 'Chờ Admin duyệt thủ công'})`
     );
 
     return NextResponse.json({

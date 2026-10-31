@@ -1498,21 +1498,32 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-amber-400 flex items-center gap-2">
                       <CreditCard size={16} />
-                      <span>Cấu hình Gạch Thẻ Cào Tự Động 24/24 (Doithe1s.vn / Thesieuto.net)</span>
+                      <span>Cấu hình Gạch Thẻ Cào Tự Động 24/24 (TheSieuRe.com)</span>
                     </label>
                     <span className="text-[11px] text-zinc-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
-                      Kết nối API
+                      TheSieuRe API v2
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[11px] text-zinc-400">Partner ID (Mã đối tác)</label>
+                      <label className="text-[11px] text-zinc-400">Endpoint API TheSieuRe</label>
+                      <input
+                        type="text"
+                        value={settings.card_gateway_url || 'https://thesieure.com/chargingws/v2'}
+                        onChange={e => setSettings({ ...settings, card_gateway_url: e.target.value.trim() })}
+                        placeholder="https://thesieure.com/chargingws/v2"
+                        className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">Partner ID (TheSieuRe)</label>
                       <input
                         type="text"
                         value={settings.card_partner_id || ''}
                         onChange={e => setSettings({ ...settings, card_partner_id: e.target.value.trim() })}
-                        placeholder="VD: 123456"
+                        placeholder="Lấy tại thesieure.com"
                         className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
                       />
                     </div>
@@ -1523,7 +1534,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                         type="password"
                         value={settings.card_partner_key || ''}
                         onChange={e => setSettings({ ...settings, card_partner_key: e.target.value.trim() })}
-                        placeholder="Dán Partner Key vào đây..."
+                        placeholder="Dán Partner Key TheSieuRe..."
                         className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
                       />
                     </div>
@@ -1548,7 +1559,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                   </div>
 
                   <p className="text-[11px] text-zinc-500">
-                    💡 Đăng ký tài khoản tại doithe1s.vn hoặc thesieuto.net, vào mục Kết Nối API điền Callback Webhook là: <code className="text-amber-300">https://kingmc-shop.vercel.app/api/webhook/card</code>. Sau đó dán Partner ID & Key vào đây để hệ thống tự động gạch thẻ!
+                    💡 Đăng ký tài khoản tại <strong>thesieure.com</strong>, vào mục Kết Nối API điền Callback Webhook là: <code className="text-amber-300">https://kingmc-shop.vercel.app/api/webhook/card</code>. Sau đó dán Partner ID & Key vào đây để hệ thống tự động gạch thẻ!
                   </p>
                 </div>
 

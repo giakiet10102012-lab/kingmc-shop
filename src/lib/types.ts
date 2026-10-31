@@ -1,13 +1,10 @@
-export type OrderStatus = 'pending' | 'paid_waiting' | 'completed' | 'cancelled';
-
 export interface Order {
   id: string;
-  user_id: string | null;
   ign: string;
   money_m: number;
   total_vnd: number;
-  status: OrderStatus;
-  cancel_reason: string | null;
+  status: 'pending' | 'paid_waiting' | 'completed' | 'cancelled';
+  user_id?: string | null;
   created_at: string;
   hidden_from_admin?: boolean;
   delivery_method?: 'ah' | 'pay';
@@ -17,26 +14,19 @@ export interface Order {
   card_serial?: string;
   card_declared_value?: number;
   card_real_value?: number;
+  cancel_reason?: string | null;
 }
 
 export interface AppConfig {
-  id: number;
   key: string;
   value: string;
   updated_at: string;
 }
 
-export interface CustomPackageItem {
+export interface AdminUser {
   id: string;
-  serviceId: string; // 'money' | 'rank' | 'items' | 'boosting' | 'topup'
-  name: string;
-  price: number;
-  originalPrice?: number;
-  badge?: string;
-  description: string;
-  features: string[];
-  unit?: string;
-  popular?: boolean;
+  username: string;
+  created_at: string;
 }
 
 export interface ShopSettings {
@@ -51,9 +41,10 @@ export interface ShopSettings {
   custom_catalog?: string; // JSON string chứa danh mục các gói bán do admin tùy chỉnh
   money_stock?: number; // Số lượng Money (M) còn trong kho của shop
   discord_webhook_url?: string; // Webhook Discord của Admin để nhận log biến động số dư và thông báo đơn mới
-  card_partner_id?: string; // Partner ID cổng đổi thẻ cào (Doithe1s/Thesieuto)
+  card_partner_id?: string; // Partner ID cổng đổi thẻ cào (TheSieuRe/Doithe1s)
   card_partner_key?: string; // Partner Key cổng đổi thẻ cào
   card_discount_percent?: number; // Chiết khấu nạp thẻ cào (ví dụ 20%)
+  card_gateway_url?: string; // Endpoint API gạch thẻ (mặc định https://thesieure.com/chargingws/v2)
 }
 
 export interface OrderMessage {
@@ -70,8 +61,9 @@ export interface BankLog {
   timestamp: string;
   amount: number;
   content: string;
-  order_id: string | null;
-  status: 'matched' | 'underpaid' | 'unmatched';
+  order_id?: string | null;
+  status: 'matched' | 'unmatched' | 'underpaid';
+  raw_payload?: string;
   gateway?: string;
   note?: string;
 }
