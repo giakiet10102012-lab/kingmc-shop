@@ -242,6 +242,15 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
                 <p className="text-xs text-center text-zinc-400">
                   Mở app ngân hàng (Techcombank, MB, Momo, BIDV...) quét mã để thanh toán
                 </p>
+
+                <div className="w-full bg-[#181824] border border-amber-500/30 p-2.5 rounded-xl text-left space-y-1 shadow-sm">
+                  <p className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                    <span>💡 Lưu ý đối với app Techcombank:</span>
+                  </p>
+                  <p className="text-[11px] text-zinc-300 leading-tight">
+                    Do chính sách bảo mật riêng của Techcombank, app sẽ để trống ô Số tiền & Nội dung. Quý khách chỉ cần nhập số tiền <strong>{formatVND(order.total_vnd)}</strong> và dán <strong>Nội dung đã sao chép ở Bước 1</strong> vào là xong!
+                  </p>
+                </div>
               </div>
 
               {/* Right Column: Manual Transfer Info */}
