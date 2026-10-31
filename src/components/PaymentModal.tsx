@@ -76,7 +76,7 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
   const vietQrUrl = `https://img.vietqr.io/image/${settings.bank_id || 'TCB'}-${settings.bank_account}-qr_only.png?amount=${order.total_vnd}&addInfo=${encodeURIComponent(transferNoteForQr)}&accountName=${encodeURIComponent(settings.bank_owner)}`;
   
   const hasCustomQr = Boolean(settings.qr_image_url && settings.qr_image_url.trim().length > 0);
-  const currentQrUrl = (hasCustomQr && useCustomQr) ? settings.qr_image_url.trim() : vietQrUrl;
+  const currentQrUrl = (hasCustomQr && useCustomQr && settings.qr_image_url) ? settings.qr_image_url.trim() : vietQrUrl;
 
   // Xử lý tải ảnh QR về điện thoại / máy tính
   const handleDownloadQr = async () => {
