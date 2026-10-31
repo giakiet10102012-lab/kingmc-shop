@@ -146,18 +146,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Supabase chưa được cấu hình' }, { status: 500 });
     }
 
-    let body: any = {};
     let rawText = '';
+    try {
+      rawText = await req.text();
+    } catch {}
 
-    const contentType = req.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      body = await req.json().catch(() => ({}));
-    } else {
-      rawText = await req.text().catch(() => '');
+    let body: any = {};
+    if (rawText) {
       try {
         body = JSON.parse(rawText);
       } catch {
-        body = { text: rawText };
+        // Tự động xử lý nếu thông báo ngân hàng chứa dấu xuống dòng \n làm hỏng cú pháp JSON
+        try {
+          const sanitized = rawText.replace(/[\r\n]+/g, ' ');
+          body = JSON.parse(sanitized);
+        } catch {
+          body = { content: rawText };
+        }
       }
     }
 
@@ -194,11 +199,11 @@ export async function POST(req: Request) {
       amount = Number(body.amount) || extractAmountFromText(content);
       gateway = 'DiscordWebhook';
     }
-    // Trường hợp 4: Generic / Custom JSON
+    // Trường hợp 4: Generic / MacroDroid / Custom JSON / Plain Text
     else {
-      content = String(body.content || body.description || body.text || body.message || '');
+      content = String(body.content || body.description || body.text || body.message || rawText || '');
       amount = Number(body.amount) || Number(body.total_vnd) || extractAmountFromText(content);
-      gateway = String(body.gateway || body.bank || 'CustomWebhook');
+      gateway = String(body.gateway || body.bank || body.app || 'Bank');
       referenceCode = String(body.id || body.code || body.ref || referenceCode);
     }
 
