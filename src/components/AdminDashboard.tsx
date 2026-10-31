@@ -176,6 +176,8 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   const [matchingLogId, setMatchingLogId] = useState<string | null>(null);
   const [manualOrderId, setManualOrderId] = useState<string>('');
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [showMacroDroidGuide, setShowMacroDroidGuide] = useState(false);
+  const [copiedMacroJson, setCopiedMacroJson] = useState(false);
 
   // Fetch bank logs
   const fetchBankLogs = async () => {
@@ -823,6 +825,49 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                   <p className="text-[11px] text-zinc-400 leading-relaxed">
                     💡 Hỗ trợ: <strong>SePay, Casso, Techcombank SMS/App bot, Webhook Discord Forwarder, hoặc bất kỳ tool thông báo tiền vào nào</strong>. Dán link này vào mục Webhook của bạn để kích hoạt hệ thống tự động!
                   </p>
+
+                  <div className="pt-2 border-t border-[#1e1e2e] flex items-center justify-between">
+                    <span className="text-[11px] text-zinc-400">Cấu hình MacroDroid / Thông báo Techcombank:</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowMacroDroidGuide(!showMacroDroidGuide)}
+                      className="text-[11px] text-blue-400 hover:underline font-semibold"
+                    >
+                      {showMacroDroidGuide ? "Ẩn hướng dẫn JSON" : "Xem mẫu JSON MacroDroid"}
+                    </button>
+                  </div>
+
+                  {showMacroDroidGuide && (
+                    <div className="rounded-lg bg-[#12121a] p-3 border border-blue-500/30 space-y-2 mt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-blue-400">Mẫu Body JSON dán vào MacroDroid:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText('{\n  "content": "{not_title} {not_text} {not_big_text}",\n  "title": "{not_title}",\n  "text": "{not_text}",\n  "big_text": "{not_big_text}",\n  "notification": "{notification}",\n  "app": "Techcombank"\n}');
+                            setCopiedMacroJson(true);
+                            setTimeout(() => setCopiedMacroJson(false), 2000);
+                          }}
+                          className="text-[10px] text-emerald-400 hover:underline font-bold"
+                        >
+                          {copiedMacroJson ? "Đã copy ✓" : "Copy Body JSON"}
+                        </button>
+                      </div>
+                      <pre className="text-[10px] font-mono text-zinc-300 bg-[#0a0a0f] p-2 rounded border border-[#1e1e2e] overflow-x-auto select-all">
+{`{
+  "content": "{not_title} {not_text} {not_big_text}",
+  "title": "{not_title}",
+  "text": "{not_text}",
+  "big_text": "{not_big_text}",
+  "notification": "{notification}",
+  "app": "Techcombank"
+}`}
+                      </pre>
+                      <p className="text-[10px] text-amber-400 leading-tight">
+                        ⚠️ <strong>Lưu ý:</strong> Dùng dấu ngoặc nhọn <code>{'{...}'}</code> (Magic Text), <strong>KHÔNG</strong> dùng dấu ngoặc vuông <code>[...]</code>. Biến <code>{'{not_big_text}'}</code> chứa nội dung chuyển khoản của Techcombank!
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Log Quick Stats */}

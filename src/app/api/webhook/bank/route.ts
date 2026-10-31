@@ -106,8 +106,8 @@ async function sendDiscordNotification(webhookUrl: string | undefined, message: 
 // Trích xuất mã đơn hàng từ nội dung chuyển khoản
 function extractOrderId(text: string): string | null {
   if (!text) return null;
-  // Tìm dạng KMC-1234 hoặc KMC1234
-  const match = text.match(/KMC-?(\d{4,8})/i);
+  // Tìm dạng KMC-1234, KMC1234, KMC 1234, #KMC-1234, KMC_1234
+  const match = text.match(/(?:#|\b)?KMC[\s\-_]?(\d{4,8})\b/i);
   if (match) {
     return `KMC-${match[1]}`;
   }
@@ -210,17 +210,30 @@ export async function POST(req: Request) {
     }
     // Trường hợp 4: Generic / MacroDroid / Custom JSON / Plain Text
     else {
-      const rawParts = [
+      const parts = [
+        body.big_text,
+        body.not_big_text,
+        body.notification,
         body.content,
         body.description,
         body.text,
+        body.not_text,
         body.message,
-        body.notification,
         body.title,
+        body.not_title,
         body.body,
-        rawText
+        body.sub_text
       ].filter(Boolean);
-      content = rawParts.join(' ').trim();
+
+      if (parts.length > 0) {
+        content = parts
+          .map((p: any) => typeof p === 'object' ? JSON.stringify(p) : String(p))
+          .join(' ')
+          .trim();
+      } else {
+        content = rawText.trim();
+      }
+
       amount = Number(body.amount) || Number(body.total_vnd) || extractAmountFromText(content);
       gateway = String(body.gateway || body.bank || body.app || body.package || 'Techcombank');
       referenceCode = String(body.id || body.code || body.ref || referenceCode);
@@ -373,12 +386,22 @@ export async function POST(req: Request) {
       }
     }
 
+    // Dọn dẹp hiển thị log: loại bỏ các chuỗi JSON thô như {"content": ...} nếu có
+    let displayContent = content;
+    try {
+      if (displayContent.includes('{"') || displayContent.includes('{\"')) {
+        displayContent = displayContent.replace(/\{[^{}]*"content"[^{}]*\}/g, '').trim();
+      }
+    } catch {}
+    displayContent = displayContent.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!displayContent) displayContent = content.slice(0, 200);
+
     // 3. Ghi vào nhật ký biến động số dư (Bank Logs)
     const newLog: BankLog = {
       id: `LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       timestamp: new Date().toISOString(),
       amount,
-      content,
+      content: displayContent,
       order_id: matchedOrder ? matchedOrder.id : extractedId,
       status: logStatus,
       gateway,
@@ -452,11 +475,13 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Chưa cấu hình Supabase' }, { status: 500 });
     }
 
+    const targetOrderId = extractOrderId(order_id) || order_id.toUpperCase().trim();
+
     // 1. Lấy đơn hàng cần khớp
     const { data: order, error: ordErr } = await supabase
       .from('orders')
       .select('*')
-      .eq('id', order_id)
+      .eq('id', targetOrderId)
       .maybeSingle();
 
     if (ordErr || !order) {
@@ -467,6 +492,21 @@ export async function PATCH(req: Request) {
     if (order.status === 'pending') {
       await supabase.from('orders').update({ status: 'paid_waiting' }).eq('id', order.id);
       await adjustStock(supabase, -Number(order.money_m));
+
+      const methodText = order.delivery_method === 'pay' 
+        ? '⚡ Hình thức: Chuyển /pay trực tiếp. Vui lòng online ingame để nhận tiền.'
+        : '🏪 Hình thức: Treo sàn /ah. Shop đang chuẩn bị vào game mua món đồ của bạn.';
+
+      try {
+        await supabase.from('order_messages').insert([{
+          order_id: order.id,
+          sender: 'admin',
+          sender_name: 'Admin Shop',
+          message: `✅ [Khớp Tiền Thủ Công]: Admin đã xác nhận thanh toán cho đơn hàng của bạn! ${methodText}`
+        }]);
+      } catch (ticketErr) {
+        console.warn('Manual ticket message warning:', ticketErr);
+      }
     }
 
     // 3. Cập nhật log tương ứng
