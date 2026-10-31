@@ -52,7 +52,27 @@ export default function OrderHistoryModal({
       const res = await fetch(url);
       if (res.ok) {
         const data: Order[] = await res.json();
-        setOrders(data);
+        // Lọc tháng hiện tại
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const monthOrders = (data || []).filter(o => {
+          if (!o.created_at) return true;
+          const d = new Date(o.created_at);
+          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        });
+
+        // Tự động dọn dẹp các ID đơn của tháng cũ khỏi localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            const currentMonthIds = monthOrders.map(o => o.id);
+            const saved = JSON.parse(localStorage.getItem('kingmc_my_orders') || '[]');
+            const cleaned = saved.filter((id: string) => currentMonthIds.includes(id));
+            localStorage.setItem('kingmc_my_orders', JSON.stringify(cleaned));
+          } catch {}
+        }
+
+        setOrders(monthOrders);
       } else {
         setOrders([]);
       }
@@ -98,6 +118,9 @@ export default function OrderHistoryModal({
                   ? `Tài khoản: ${userEmail || 'Thành viên KingMC'}`
                   : 'Tra cứu các đơn hàng đã đặt mua'}
               </p>
+              <span className="inline-block mt-0.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                📅 Lịch sử Tháng ${new Date().getMonth() + 1}/${new Date().getFullYear()} (Tự động làm mới mỗi tháng)
+              </span>
             </div>
           </div>
 

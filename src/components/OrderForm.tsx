@@ -43,6 +43,26 @@ const CARD_AMOUNTS = [
   10000, 20000, 30000, 50000, 100000, 200000, 300000, 500000, 1000000
 ];
 
+// Bảng chiết khấu TheSieuRe chuẩn theo hình ảnh tài khoản Admin cung cấp:
+// 10k: 19.5% | 20k: 19.5% | 30k: 19.5%
+// 50k: 14.5% | 100k: 14.5% | 200k: 14.5% | 300k: 14.5%
+// 500k: 16.5% | 1.000k: 16.5%
+export const THESIEURE_TIERS: Record<number, number> = {
+  10000: 19.5,
+  20000: 19.5,
+  30000: 19.5,
+  50000: 14.5,
+  100000: 14.5,
+  200000: 14.5,
+  300000: 14.5,
+  500000: 16.5,
+  1000000: 16.5
+};
+
+export function getTheSieuReDiscount(amount: number, fallback: number = 20): number {
+  return THESIEURE_TIERS[amount] !== undefined ? THESIEURE_TIERS[amount] : fallback;
+}
+
 export default function OrderForm({ settings, onOrderCreated, userId, onRequireAuth }: OrderFormProps) {
   // Phương thức thanh toán: Ngân Hàng (bank) hoặc Thẻ Cào (card)
   const [paymentTab, setPaymentTab] = useState<'bank' | 'card'>('bank');
@@ -79,8 +99,8 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
   const isExceedingStock = parsedMoney > stock;
   const isShopActive = settings.is_active !== false && !isOutOfStock;
 
-  // Tính toán quy đổi thẻ cào
-  const cardDiscountPercent = settings.card_discount_percent !== undefined ? settings.card_discount_percent : 20;
+  // Tính toán quy đổi thẻ cào theo bảng phí TheSieuRe chính xác
+  const cardDiscountPercent = getTheSieuReDiscount(cardAmount, settings.card_discount_percent);
   const cardRealVND = Math.floor(cardAmount * (1 - cardDiscountPercent / 100));
   const cardMoneyReceived = Math.floor(cardRealVND / currentRate);
   const isCardExceedingStock = cardMoneyReceived > stock;
@@ -646,21 +666,30 @@ export default function OrderForm({ settings, onOrderCreated, userId, onRequireA
                 <span className="text-xs text-emerald-400 font-bold">Thực nhận: {formatVND(cardRealVND)}</span>
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {CARD_AMOUNTS.map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => setCardAmount(amt)}
-                    className={cn(
-                      "py-2 px-2 rounded-xl border text-xs sm:text-sm font-mono font-bold transition-all text-center",
-                      cardAmount === amt
-                        ? "bg-amber-500/20 border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-                        : "bg-[#0a0a0f] border-[#1e1e2e] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                    )}
-                  >
-                    {formatVND(amt)}
-                  </button>
-                ))}
+                {CARD_AMOUNTS.map((amt) => {
+                  const fee = getTheSieuReDiscount(amt, settings.card_discount_percent);
+                  return (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setCardAmount(amt)}
+                      className={cn(
+                        "py-2 px-1.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-0.5",
+                        cardAmount === amt
+                          ? "bg-amber-500/20 border-amber-500 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                          : "bg-[#0a0a0f] border-[#1e1e2e] text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                      )}
+                    >
+                      <span className="font-mono font-bold text-xs sm:text-sm">{formatVND(amt)}</span>
+                      <span className={cn(
+                        "text-[10px] font-semibold px-1 py-0.2 rounded",
+                        amt >= 50000 && amt <= 300000 ? "text-emerald-400 bg-emerald-500/15" : "text-amber-400/90"
+                      )}>
+                        -{fee}%
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <p className="text-[11px] text-amber-300/80">
                 ⚠️ <strong>Lưu ý:</strong> Vui lòng chọn <strong>đúng mệnh giá thẻ thật</strong>. Nếu chọn sai mệnh giá có thể bị phạt hoặc mất thẻ theo quy định của cổng gạch thẻ!

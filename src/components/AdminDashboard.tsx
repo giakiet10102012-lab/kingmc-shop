@@ -74,6 +74,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
   });
 
   const [activeMainSection, setActiveMainSection] = useState<'orders' | 'bank_logs' | 'card_logs' | 'settings'>('orders');
+  const [statsTimeFilter, setStatsTimeFilter] = useState<'all' | 'today' | '7days' | 'month'>('all');
   
   // Card logs states
   const [cardLogs, setCardLogs] = useState<CardLog[]>([]);
@@ -561,23 +562,37 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
     }));
   };
 
-  // Financial Stats (Tính tổng tích lũy kể cả các đơn đã dọn dẹp, chỉ tính các đơn đã xác nhận)
+  // Financial Stats (Lọc linh hoạt theo: Hôm nay, 7 ngày qua, Tháng này, Toàn thời gian)
   const stats = useMemo(() => {
-    const validOrders = orders.filter(o => o.status !== 'pending');
-    const allCompleted = [...orders, ...hiddenOrders].filter(o => o.status === 'completed');
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    const matchesTime = (dateStr?: string) => {
+      if (!dateStr || statsTimeFilter === 'all') return true;
+      const t = new Date(dateStr).getTime();
+      if (statsTimeFilter === 'today') return t >= startOfToday;
+      if (statsTimeFilter === '7days') return t >= sevenDaysAgo;
+      if (statsTimeFilter === 'month') return t >= startOfMonth;
+      return true;
+    };
+
+    const validOrders = orders.filter(o => o.status !== 'pending' && matchesTime(o.created_at));
+    const allCompleted = [...orders, ...hiddenOrders].filter(o => o.status === 'completed' && matchesTime(o.created_at));
     const totalRevenue = allCompleted.reduce((acc, curr) => acc + (Number(curr.total_vnd) || 0), 0);
     const totalM = allCompleted.reduce((acc, curr) => acc + (Number(curr.money_m) || 0), 0);
 
     return {
       total: validOrders.length,
-      waitingAdmin: validOrders.filter(o => o.status === 'paid_waiting').length,
-      completed: validOrders.filter(o => o.status === 'completed').length,
-      cancelled: validOrders.filter(o => o.status === 'cancelled').length,
-      hidden: hiddenOrders.filter(o => o.status !== 'pending').length,
+      waitingAdmin: orders.filter(o => o.status === 'paid_waiting').length, // Đơn chờ duyệt luôn tính thời gian thực
+      completed: allCompleted.length,
+      cancelled: orders.filter(o => o.status === 'cancelled' && matchesTime(o.created_at)).length,
+      hidden: hiddenOrders.filter(o => o.status !== 'pending' && matchesTime(o.created_at)).length,
       totalRevenue,
       totalM
     };
-  }, [orders, hiddenOrders]);
+  }, [orders, hiddenOrders, statsTimeFilter]);
 
   // Filtered orders (CHỈ HIỂN THỊ ĐƠN HÀNG KHI ĐÃ NHẤN XÁC NHẬN THANH TOÁN: status !== 'pending')
   const filteredOrders = useMemo(() => {
@@ -1590,6 +1605,56 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
         {/* SECTION 3: ORDERS MANAGEMENT TABLE */}
         {activeMainSection === 'orders' && (
           <div className="space-y-6">
+            {/* BỘ LỌC THỐNG KÊ DOANH THU & SẢN LƯỢNG THEO THỜI GIAN */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-[#12121a] p-3 rounded-2xl border border-[#1e1e2e] shadow-md">
+              <div className="flex items-center gap-2 text-xs font-bold text-zinc-200">
+                <TrendingUp size={16} className="text-emerald-400" />
+                <span>Xem Thống Kê Doanh Thu & Sản Lượng:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-[#0a0a0f] border border-[#1e1e2e]">
+                <button
+                  type="button"
+                  onClick={() => setStatsTimeFilter('today')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    statsTimeFilter === 'today' ? "bg-emerald-500 text-black shadow-lg" : "text-zinc-400 hover:text-white"
+                  )}
+                >
+                  Hôm Nay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatsTimeFilter('7days')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    statsTimeFilter === '7days' ? "bg-emerald-500 text-black shadow-lg" : "text-zinc-400 hover:text-white"
+                  )}
+                >
+                  7 Ngày Qua
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatsTimeFilter('month')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    statsTimeFilter === 'month' ? "bg-emerald-500 text-black shadow-lg" : "text-zinc-400 hover:text-white"
+                  )}
+                >
+                  Tháng Này
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatsTimeFilter('all')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                    statsTimeFilter === 'all' ? "bg-emerald-500 text-black shadow-lg" : "text-zinc-400 hover:text-white"
+                  )}
+                >
+                  Toàn Thời Gian (Từ Trước Đến Nay)
+                </button>
+              </div>
+            </div>
+
             {/* 6 Key Statistics Cards */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 sm:p-5">

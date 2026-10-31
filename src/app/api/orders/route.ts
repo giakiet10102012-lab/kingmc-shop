@@ -246,7 +246,19 @@ export async function GET(req: Request) {
     }
 
     // NẾU LÀ MEMBER (KHÁCH HÀNG):
-    // Luôn trả về ĐẦY ĐỦ đơn hàng trong lịch sử mua của khách (kể cả admin đã dọn dẹp phía admin)
+    // Yêu cầu: Khách chỉ xem được lịch sử mua hàng từ đầu tháng đến cuối tháng hiện tại, qua tháng mới là reset hết cho nhẹ
+    if (!isAdmin && Array.isArray(data)) {
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const monthOrders = data.filter((o: any) => {
+        if (!o.created_at) return true;
+        const d = new Date(o.created_at);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      });
+      return NextResponse.json(monthOrders);
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

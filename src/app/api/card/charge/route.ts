@@ -1,3 +1,18 @@
+const THESIEURE_TIERS: Record<number, number> = {
+  10000: 19.5,
+  20000: 19.5,
+  30000: 19.5,
+  50000: 14.5,
+  100000: 14.5,
+  200000: 14.5,
+  300000: 14.5,
+  500000: 16.5,
+  1000000: 16.5
+};
+
+function getTheSieuReDiscount(amount: number, fallback: number = 20): number {
+  return THESIEURE_TIERS[amount] !== undefined ? THESIEURE_TIERS[amount] : fallback;
+}
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
@@ -57,7 +72,9 @@ export async function POST(req: Request) {
     }
 
     const ratePerM = Number(configMap.get('rate_per_m') || '50');
-    const discountPercent = Number(configMap.get('card_discount_percent') || '20'); // Mặc định chiết khấu 20%
+    const defaultDiscount = Number(configMap.get('card_discount_percent') || '20');
+    // Áp dụng bảng chiết khấu TheSieuRe chính xác theo mệnh giá:
+    const discountPercent = getTheSieuReDiscount(declaredAmount, defaultDiscount);
     const partnerId = (configMap.get('card_partner_id') || '').trim();
     const partnerKey = (configMap.get('card_partner_key') || '').trim();
     const gatewayUrl = (configMap.get('card_gateway_url') || 'https://thesieure.com/chargingws/v2').trim();
