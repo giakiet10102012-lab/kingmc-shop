@@ -13,8 +13,7 @@ import {
   Store, 
   Zap, 
   Sparkles,
-  ShieldAlert,
-  ArrowDown
+  Download
 } from "lucide-react";
 import { formatVND } from "@/lib/utils";
 import type { ShopSettings, Order } from "@/lib/types";
@@ -30,6 +29,8 @@ interface PaymentModalProps {
 export default function PaymentModal({ order, settings, onClose, onOpenTicket, onPaymentConfirmed }: PaymentModalProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [useCustomQr, setUseCustomQr] = useState(false);
@@ -69,12 +70,48 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
   };
 
   const transferContent = `${order.id} ${order.ign}`;
+  const transferNoteForQr = `${order.id.replace(/-/g, '')} ${order.ign}`.trim();
   
-  // VietQR tự động điền sẵn số tiền & nội dung KMC-XXXX <ign>
-  const vietQrUrl = `https://img.vietqr.io/image/${settings.bank_id || 'TCB'}-${settings.bank_account}-compact2.png?amount=${order.total_vnd}&addInfo=${encodeURIComponent(transferContent)}&accountName=${encodeURIComponent(settings.bank_owner)}`;
+  // VietQR dạng chỉ lấy mã QR thuần túy (qr_only) phóng to cực đại, không khung chữ rườm rà
+  const vietQrUrl = `https://img.vietqr.io/image/${settings.bank_id || 'TCB'}-${settings.bank_account}-qr_only.png?amount=${order.total_vnd}&addInfo=${encodeURIComponent(transferNoteForQr)}&accountName=${encodeURIComponent(settings.bank_owner)}`;
   
   const hasCustomQr = Boolean(settings.qr_image_url && settings.qr_image_url.trim().length > 0);
   const currentQrUrl = (hasCustomQr && useCustomQr) ? settings.qr_image_url.trim() : vietQrUrl;
+
+  // Xử lý tải ảnh QR về điện thoại / máy tính
+  const handleDownloadQr = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(currentQrUrl);
+      const text = await res.text();
+      let downloadUrl = currentQrUrl;
+
+      // Nếu là SVG chứa ảnh PNG base64 bên trong
+      const base64Index = text.indexOf('data:image/png;base64,');
+      if (base64Index !== -1) {
+        const endIndex = text.indexOf('"', base64Index);
+        downloadUrl = text.substring(base64Index, endIndex);
+      } else {
+        const blob = new Blob([text], { type: 'image/svg+xml' });
+        downloadUrl = URL.createObjectURL(blob);
+      }
+
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `VietQR_${order.id}_${order.total_vnd}d.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 3000);
+    } catch (err) {
+      console.warn('Direct download failed, opening in new tab:', err);
+      window.open(currentQrUrl, '_blank');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
@@ -190,7 +227,7 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
           </div>
 
           {/* ═════════════════════════════════════════════════════════════════ */}
-          {/* BƯỚC 2: THANH TOÁN (VIETQR TỰ ĐIỀN HOẶC CHUYỂN THỦ CÔNG)         */}
+          {/* BƯỚC 2: THANH TOÁN (MÃ QR THUẦN TÚY PHÓNG TO + NÚT TẢI ẢNH)      */}
           {/* ═════════════════════════════════════════════════════════════════ */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -202,12 +239,12 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               
-              {/* Left Column: QR Code Section */}
+              {/* Left Column: QR Code Section (Phóng to cực đại + Nút tải ảnh) */}
               <div className="flex flex-col items-center gap-3.5 border border-[#1e1e2e] bg-[#0a0a0f] p-4 sm:p-5 rounded-xl">
                 <div className="flex items-center justify-between w-full pb-2 border-b border-[#1e1e2e]">
                   <div className="flex items-center gap-2">
                     <QrCode className="w-4 h-4 text-emerald-400" />
-                    <h4 className="font-bold text-zinc-200 text-sm">Quét Mã QR</h4>
+                    <h4 className="font-bold text-zinc-200 text-sm">Mã QR Thanh Toán</h4>
                   </div>
 
                   {hasCustomQr && (
@@ -224,13 +261,13 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
                   <div className="w-full bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg text-center">
                     <p className="text-xs text-emerald-300 font-semibold flex items-center justify-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-                      <span>VietQR tự động điền sẵn <strong>{formatVND(order.total_vnd)}</strong> & nội dung <strong>{transferContent}</strong></span>
+                      <span>Mã VietQR tự động điền sẵn <strong>{formatVND(order.total_vnd)}</strong> & nội dung <strong>{transferNoteForQr}</strong></span>
                     </p>
                   </div>
                 )}
 
-                {/* QR Code Frame */}
-                <div className="bg-white p-3 rounded-2xl w-56 h-56 sm:w-60 sm:h-60 flex items-center justify-center overflow-hidden shadow-xl border-4 border-white">
+                {/* Khung mã QR phóng to cực đại - Chỉ lấy mã QR thuần túy (qr_only) */}
+                <div className="bg-white p-3.5 rounded-2xl w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center overflow-hidden shadow-2xl border-4 border-emerald-500/30">
                   <img 
                     src={currentQrUrl} 
                     alt="Mã QR Thanh Toán" 
@@ -239,16 +276,36 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
                   />
                 </div>
 
-                <p className="text-xs text-center text-zinc-400">
-                  Mở app ngân hàng (Techcombank, MB, Momo, BIDV...) quét mã để thanh toán
-                </p>
+                {/* NÚT TẢI ẢNH QR VỀ MÁY CHO ĐIỆN THOẠI */}
+                <button
+                  onClick={handleDownloadQr}
+                  disabled={downloading}
+                  className={`w-full max-w-xs py-3 px-4 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg ${
+                    downloadSuccess 
+                      ? 'bg-emerald-500 text-black scale-105'
+                      : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-emerald-600/30 hover:scale-[1.02]'
+                  }`}
+                >
+                  {downloadSuccess ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-black" />
+                      <span>✓ ĐÃ LƯU ẢNH VÀO MÁY!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                      <span>{downloading ? "Đang tải ảnh..." : "📥 TẢI MÃ QR VỀ MÁY"}</span>
+                    </>
+                  )}
+                </button>
 
-                <div className="w-full bg-[#181824] border border-amber-500/30 p-2.5 rounded-xl text-left space-y-1 shadow-sm">
-                  <p className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
-                    <span>💡 Lưu ý đối với app Techcombank:</span>
+                {/* Hướng dẫn quét trên cùng 1 điện thoại */}
+                <div className="w-full max-w-xs bg-[#181824] border border-emerald-500/30 p-2.5 rounded-xl text-center space-y-1">
+                  <p className="text-[11px] font-bold text-emerald-400">
+                    📲 Mẹo nạp tiền ngay trên cùng 1 điện thoại:
                   </p>
                   <p className="text-[11px] text-zinc-300 leading-tight">
-                    Do chính sách bảo mật riêng của Techcombank, app sẽ để trống ô Số tiền & Nội dung. Quý khách chỉ cần nhập số tiền <strong>{formatVND(order.total_vnd)}</strong> và dán <strong>Nội dung đã sao chép ở Bước 1</strong> vào là xong!
+                    Bấm <strong>&quot;Tải mã QR về máy&quot;</strong> ➔ Mở app ngân hàng bấm <strong>Quét QR</strong> ➔ Chọn biểu tượng <strong>Ảnh / Thư viện</strong> để thanh toán tự động không cần 2 máy!
                   </p>
                 </div>
               </div>
