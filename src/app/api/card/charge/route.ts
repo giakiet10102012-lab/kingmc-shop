@@ -13,6 +13,7 @@ const THESIEURE_TIERS: Record<number, number> = {
 function getTheSieuReDiscount(amount: number, fallback: number = 20): number {
   return THESIEURE_TIERS[amount] !== undefined ? THESIEURE_TIERS[amount] : fallback;
 }
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
@@ -30,6 +31,32 @@ const getServiceClient = () => {
 };
 
 const generateOrderId = () => `KMC-${Math.floor(1000 + Math.random() * 9000)}`;
+
+// Hàm điều chỉnh kho an toàn
+async function adjustStock(supabase: any, delta: number): Promise<number | null> {
+  try {
+    const { data: stockRow } = await supabase
+      .from('app_configs')
+      .select('value')
+      .eq('key', 'money_stock')
+      .maybeSingle();
+
+    let currentStock = 1000;
+    if (stockRow && stockRow.value !== undefined && stockRow.value !== null && !isNaN(Number(stockRow.value))) {
+      currentStock = Number(stockRow.value);
+    }
+
+    const newStock = Math.max(0, currentStock + delta);
+    await supabase.from('app_configs').upsert(
+      { key: 'money_stock', value: String(newStock), updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+    return newStock;
+  } catch (err) {
+    console.error('adjustStock error:', err);
+    return null;
+  }
+}
 
 // Bắn thông báo về Discord Webhook Admin
 async function sendDiscordNotification(webhookUrl: string | undefined, message: string) {
@@ -64,7 +91,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Mệnh giá thẻ tối thiểu là 10.000 VNĐ' }, { status: 400 });
     }
 
-    // 1. Đọc cấu hình shop (tỷ giá, chiết khấu thẻ cào, partner id/key, gateway url)
+    // 1. Đọc cấu hình shop (tỷ giá, partner id/key, gateway url)
     const { data: configs } = await supabase.from('app_configs').select('*');
     const configMap = new Map<string, string>();
     if (configs) {
@@ -134,7 +161,7 @@ export async function POST(req: Request) {
     orderData.card_declared_value = declaredAmount;
     orderData.card_real_value = realVND;
 
-    // Lưu thẻ vào danh sách card_logs trong app_configs
+    // Khởi tạo thẻ log
     const newCardLog: CardLog = {
       id: `CARD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       timestamp: new Date().toISOString(),
@@ -148,20 +175,6 @@ export async function POST(req: Request) {
       status: 'pending',
       message: 'Đang gửi sang cổng gạch thẻ'
     };
-
-    let cardLogs: CardLog[] = [];
-    try {
-      const existingLogs = configMap.get('card_transaction_logs');
-      if (existingLogs) cardLogs = JSON.parse(existingLogs);
-    } catch {}
-    cardLogs.unshift(newCardLog);
-    cardLogs = cardLogs.slice(0, 200);
-
-    await supabase.from('app_configs').upsert({
-      key: 'card_transaction_logs',
-      value: JSON.stringify(cardLogs),
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'key' });
 
     // Lưu delivery method fallback
     await supabase.from('app_configs').upsert({
@@ -178,23 +191,24 @@ export async function POST(req: Request) {
       try {
         const cleanCode = String(code).trim();
         const cleanSerial = String(serial).trim();
-        const normalizedTelco = String(telco).toUpperCase() === 'VIETNAMOBILE' ? 'VNMOBI' : String(telco).toUpperCase();
+        const normalizedTelco = String(telco).toUpperCase();
         const command = 'charging';
 
-        // Chữ ký MD5 theo chuẩn TheSieuRe:
+        // 1. Chữ ký chuẩn v2 TheSieuRe:
         // sign = md5(partner_key + code + command + partner_id + request_id + serial + telco)
         const signTheSieuRe = crypto
           .createHash('md5')
           .update(`${partnerKey}${cleanCode}${command}${partnerId}${orderId}${cleanSerial}${normalizedTelco}`)
           .digest('hex');
 
-        // Chữ ký MD5 dự phòng nếu Admin dùng Doithe1s
-        const signDoithe1s = crypto
+        // 2. Chữ ký chuẩn cơ bản TheSieuRe / Doithe1s:
+        // sign = md5(partner_key + code + serial)
+        const signBasic = crypto
           .createHash('md5')
           .update(`${partnerKey}${cleanCode}${cleanSerial}`)
           .digest('hex');
 
-        const sign = gatewayUrl.includes('doithe1s') ? signDoithe1s : signTheSieuRe;
+        const sign = gatewayUrl.includes('doithe1s') ? signBasic : signTheSieuRe;
 
         const postData = {
           telco: normalizedTelco,
@@ -220,17 +234,85 @@ export async function POST(req: Request) {
           body: formParams.toString()
         });
 
-        const apiData = await apiRes.json().catch(() => null);
+        const rawApiText = await apiRes.text().catch(() => '');
+        let apiData: any = null;
+        try {
+          apiData = JSON.parse(rawApiText);
+        } catch {
+          apiData = { message: rawApiText };
+        }
+
+        // Nếu TSR báo lỗi chữ ký, tự động thử lại với công thức chữ ký cơ bản (signBasic)
+        if (apiData && (apiData.status === 100 || String(apiData.message).toLowerCase().includes('chữ ký') || String(apiData.message).toLowerCase().includes('sign'))) {
+          postData.sign = signBasic;
+          const retryParams = new URLSearchParams();
+          Object.entries(postData).forEach(([k, v]) => retryParams.append(k, v));
+          const retryRes = await fetch(gatewayUrl, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json'
+            },
+            body: retryParams.toString()
+          });
+          const retryText = await retryRes.text().catch(() => '');
+          try {
+            const retryJson = JSON.parse(retryText);
+            if (retryJson.status !== 100) {
+              apiData = retryJson;
+            }
+          } catch {}
+        }
+
         if (apiData) {
           apiSubmitted = true;
           apiMessage = apiData.message || (apiData.status === 99 ? 'Thẻ đang chờ duyệt' : `Status: ${apiData.status}`);
+
+          // TRƯỜNG HỢP 1: THESIEURE DUYỆT THẺ THÀNH CÔNG NGAY LẬP TỨC (status === 1)
+          if (apiData.status === 1) {
+            newCardLog.status = 'success';
+            newCardLog.message = 'TheSieuRe duyệt thành công ngay lập tức';
+            await supabase.from('orders').update({ status: 'paid_waiting' }).eq('id', orderId);
+            await adjustStock(supabase, -moneyM);
+            orderData.status = 'paid_waiting';
+          }
+          // TRƯỜNG HỢP 2: THESIEURE ĐANG XỬ LÝ (status === 99)
+          else if (apiData.status === 99) {
+            newCardLog.status = 'pending';
+            newCardLog.message = 'TheSieuRe đã nhận thẻ - Đang tự động gạch';
+          }
+          // TRƯỜNG HỢP 3: THESIEURE BÁO LỖI (status === 100, IP không hợp lệ, thẻ sai...)
+          else if (apiData.status === 100 || apiData.status === 3) {
+            newCardLog.status = 'invalid';
+            newCardLog.message = `Lỗi TheSieuRe: ${apiData.message || 'Mã lỗi ' + apiData.status}`;
+          } else {
+            newCardLog.message = `TheSieuRe: ${apiMessage}`;
+          }
         }
       } catch (callErr: any) {
         console.warn('Call TheSieuRe charging API error:', callErr);
+        newCardLog.message = `Lỗi kết nối cổng TheSieuRe: ${callErr.message}`;
       }
+    } else {
+      newCardLog.message = 'Chưa cấu hình Partner ID & Key trong Admin';
     }
 
-    // 5. Gửi thông báo về Discord cho Admin
+    // 5. Lưu thẻ vào danh sách card_logs trong app_configs với kết quả thực tế từ TheSieuRe
+    let cardLogs: CardLog[] = [];
+    try {
+      const existingLogs = configMap.get('card_transaction_logs');
+      if (existingLogs) cardLogs = JSON.parse(existingLogs);
+    } catch {}
+    cardLogs.unshift(newCardLog);
+    cardLogs = cardLogs.slice(0, 200);
+
+    await supabase.from('app_configs').upsert({
+      key: 'card_transaction_logs',
+      value: JSON.stringify(cardLogs),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'key' });
+
+    // 6. Gửi thông báo chi tiết về Discord cho Admin
     await sendDiscordNotification(
       adminDiscordWebhook,
       `💳 **[NẠP THẺ CÀO MỚI - ĐƠN #${orderId}]**\n` +
@@ -240,7 +322,7 @@ export async function POST(req: Request) {
       `• Số Seri: \`${serial}\`\n` +
       `• Thực nhận (-${discountPercent}%): **${formatVND(realVND)}** ➔ **+${moneyM}M Money**\n` +
       `• Hình thức nhận: **${method === 'pay' ? '⚡ PAY TIỀN' : '🏪 MUA /AH'}**\n` +
-      `• Cổng xử lý: **TheSieuRe.com** (${apiSubmitted ? `Đã gửi API: ${apiMessage}` : 'Chờ Admin duyệt thủ công'})`
+      `• Cổng xử lý: **TheSieuRe.com** (${apiSubmitted ? `Phản hồi: ${apiMessage}` : 'Chờ Admin duyệt thủ công'})`
     );
 
     return NextResponse.json({

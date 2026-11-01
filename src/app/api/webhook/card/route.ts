@@ -19,6 +19,16 @@ const checkAdmin = (req: Request) => {
   return pin === expectedPin;
 };
 
+// Chuẩn hóa mã đơn hàng
+function normalizeOrderId(id: string): string {
+  if (!id) return '';
+  const match = id.match(/(?:#|\b)?KMC[\s\-_]?(\d{4,8})\b/i);
+  if (match) return `KMC-${match[1]}`;
+  const numMatch = id.match(/^\d{4,8}$/);
+  if (numMatch) return `KMC-${numMatch[0]}`;
+  return id.trim();
+}
+
 // Hàm điều chỉnh kho
 async function adjustStock(supabase: any, delta: number): Promise<number | null> {
   try {
@@ -59,9 +69,223 @@ async function sendDiscordNotification(webhookUrl: string | undefined, message: 
   }
 }
 
-// 1. GET: Lấy danh sách nhật ký thẻ cào (Dành cho Admin Dashboard)
+// Hàm cốt lõi: Xử lý kết quả Callback từ TheSieuRe / Doithe1s / Các cổng thẻ
+async function processCardCallback(params: Record<string, any>) {
+  const supabase = getServiceClient();
+  if (!supabase) {
+    return new Response('Supabase not configured', { status: 500 });
+  }
+
+  const status = Number(params.status);
+  const rawRequestId = String(params.request_id || params.requestId || params.order_id || '').trim();
+  const declaredValue = Number(params.declared_value || params.amount || 0);
+  const realValue = Number(params.value || params.card_value || params.real_value || declaredValue);
+  const message = String(params.message || '');
+  const serial = String(params.serial || '').trim();
+  const code = String(params.code || '').trim();
+  const telco = String(params.telco || '').toUpperCase();
+  const transId = String(params.trans_id || params.transaction_id || '');
+
+  if (!rawRequestId && !serial && !code) {
+    return new Response('Missing request_id or card info', { status: 400 });
+  }
+
+  // 1. Tìm đơn hàng
+  const targetId = normalizeOrderId(rawRequestId);
+  let order: any = null;
+
+  if (targetId) {
+    const { data } = await supabase.from('orders').select('*').eq('id', targetId).maybeSingle();
+    order = data;
+  }
+  if (!order && rawRequestId) {
+    const { data } = await supabase.from('orders').select('*').eq('id', rawRequestId).maybeSingle();
+    order = data;
+  }
+
+  // Lấy link Discord Webhook của Admin
+  let adminDiscordWebhook: string | undefined;
+  try {
+    const { data: discCfg } = await supabase
+      .from('app_configs')
+      .select('value')
+      .eq('key', 'discord_webhook_url')
+      .maybeSingle();
+    if (discCfg?.value) adminDiscordWebhook = discCfg.value.trim();
+  } catch {}
+
+  // 2. Cập nhật nhật ký thẻ cào (card_transaction_logs)
+  try {
+    const { data: currentCfg } = await supabase
+      .from('app_configs')
+      .select('value')
+      .eq('key', 'card_transaction_logs')
+      .maybeSingle();
+
+    let cardLogs: CardLog[] = [];
+    if (currentCfg?.value) {
+      try {
+        cardLogs = JSON.parse(currentCfg.value);
+        if (!Array.isArray(cardLogs)) cardLogs = [];
+      } catch {}
+    }
+
+    let found = false;
+    cardLogs = cardLogs.map((c: CardLog) => {
+      const matchOrder = (rawRequestId && (c.order_id === rawRequestId || c.order_id === targetId));
+      const matchCard = (serial && c.serial === serial) || (code && c.code === code);
+      if (matchOrder || matchCard) {
+        found = true;
+        return {
+          ...c,
+          real_value: realValue > 0 ? realValue : c.real_value,
+          status: status === 1 ? 'success' : status === 2 ? 'wrong_amount' : status === 99 ? 'pending' : 'invalid',
+          message: message || (status === 1 ? 'Thẻ đúng, duyệt tự động thành công' : status === 2 ? 'Sai mệnh giá' : status === 99 ? 'Chờ duyệt' : 'Thẻ sai hoặc không hợp lệ')
+        };
+      }
+      return c;
+    });
+
+    if (!found) {
+      cardLogs.unshift({
+        id: `CARD-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        timestamp: new Date().toISOString(),
+        order_id: targetId || rawRequestId,
+        ign: order ? order.ign : 'Khách nạp',
+        telco: telco || (order ? order.card_telco : 'CARD'),
+        code: code || '***',
+        serial: serial || '***',
+        declared_value: declaredValue,
+        real_value: realValue,
+        status: status === 1 ? 'success' : status === 2 ? 'wrong_amount' : status === 99 ? 'pending' : 'invalid',
+        message: message || (status === 1 ? 'Thẻ đúng' : 'Thẻ không hợp lệ')
+      });
+    }
+
+    await supabase.from('app_configs').upsert({
+      key: 'card_transaction_logs',
+      value: JSON.stringify(cardLogs.slice(0, 200)),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'key' });
+  } catch (logErr) {
+    console.warn('Update card log error:', logErr);
+  }
+
+  // 3. TỰ ĐỘNG DUYỆT ĐƠN HÀNG KHI THẺ THÀNH CÔNG
+  if (order) {
+    // TRƯỜNG HỢP 1: THẺ ĐÚNG (status === 1)
+    if (status === 1) {
+      if (order.status === 'pending') {
+        // Chuyển đơn sang paid_waiting để Bot giao hàng ngay lập tức!
+        await supabase.from('orders').update({ status: 'paid_waiting' }).eq('id', order.id);
+
+        // Tự động trừ kho
+        await adjustStock(supabase, -Number(order.money_m));
+
+        // Tự động gửi tin nhắn thông báo vào Ticket của đơn hàng
+        const methodText = order.delivery_method === 'pay' 
+          ? '⚡ Hình thức: Chuyển /pay trực tiếp. Vui lòng online ingame để nhận tiền.'
+          : '🏪 Hình thức: Treo sàn /ah. Shop đang chuẩn bị vào game mua món đồ của bạn.';
+
+        try {
+          await supabase.from('order_messages').insert([{
+            order_id: order.id,
+            sender: 'admin',
+            sender_name: 'Hệ Thống Tự Động',
+            message: `🤖 [Thẻ Cào Hợp Lệ]: Đã gạch thẻ thành công mệnh giá ${formatVND(realValue)}. Đơn hàng đã được duyệt tự động thành công! ${methodText}`
+          }]);
+        } catch (msgErr) {
+          console.warn('Auto ticket message error:', msgErr);
+        }
+
+        // Bắn Discord Webhook
+        await sendDiscordNotification(
+          adminDiscordWebhook,
+          `🎉 **[GẠCH THẺ CÀO TỰ ĐỘNG THÀNH CÔNG - ĐƠN #${order.id}]**\n` +
+          `• Khách hàng: **${order.ign}**\n` +
+          `• Nhà mạng: **${order.card_telco || telco || 'Thẻ Cào'}** | Thực nhận: **${formatVND(realValue)}**\n` +
+          `• Số Money: **${order.money_m}M**\n` +
+          `• Hình thức: **${order.delivery_method === 'pay' ? '⚡ PAY TIỀN' : '🏪 MUA /AH'}**\n` +
+          `• Cổng: **TheSieuRe.com** (Mã GD: \`${transId || rawRequestId}\`)\n` +
+          `• Trạng thái: **Đã duyệt thanh toán ➔ Đang chờ bot giao hàng!**`
+        );
+      }
+    } 
+    // TRƯỜNG HỢP 2: THẺ SAI MỆNH GIÁ (status === 2)
+    else if (status === 2) {
+      if (order.status === 'pending' && realValue > 0) {
+        await supabase.from('orders').update({ 
+          status: 'paid_waiting',
+          total_vnd: realValue 
+        }).eq('id', order.id);
+
+        await adjustStock(supabase, -Number(order.money_m));
+
+        try {
+          await supabase.from('order_messages').insert([{
+            order_id: order.id,
+            sender: 'admin',
+            sender_name: 'Hệ Thống Tự Động',
+            message: `⚠️ [Thẻ Sai Mệnh Giá]: Bạn khai báo ${formatVND(declaredValue)} nhưng mệnh giá thực tế là ${formatVND(realValue)}. Đơn hàng vẫn được duyệt tự động theo mệnh giá thực!`
+          }]);
+        } catch {}
+
+        await sendDiscordNotification(
+          adminDiscordWebhook,
+          `⚠️ **[THẺ SAI MỆNH GIÁ - ĐÃ DUYỆT TỰ ĐỘNG - ĐƠN #${order.id}]**\n` +
+          `• Khách: **${order.ign}** | Khai báo: ${formatVND(declaredValue)} | Thực tế: ${formatVND(realValue)}\n` +
+          `• Trạng thái: Đã duyệt ➔ Chờ giao hàng!`
+        );
+      }
+    } 
+    // TRƯỜNG HỢP 3: THẺ LỖI / ĐÃ DÙNG (status === 3 hoặc status === 100...)
+    else if (status === 3 || status > 2) {
+      if (order.status === 'pending') {
+        await supabase.from('orders').update({ 
+          status: 'cancelled',
+          cancel_reason: message || 'Thẻ sai mã, seri hoặc đã qua sử dụng'
+        }).eq('id', order.id);
+
+        try {
+          await supabase.from('order_messages').insert([{
+            order_id: order.id,
+            sender: 'admin',
+            sender_name: 'Hệ Thống Tự Động',
+            message: `❌ [Thẻ Không Hợp Lệ]: ${message || 'Thẻ cào của bạn không đúng mã, sai seri hoặc đã qua sử dụng'}. Đơn hàng đã tự động bị hủy. Vui lòng liên hệ Admin nếu có nhầm lẫn!`
+          }]);
+        } catch {}
+
+        await sendDiscordNotification(
+          adminDiscordWebhook,
+          `❌ **[THẺ CÀO LỖI / BỊ HỦY - ĐƠN #${order.id}]**\n` +
+          `• Khách: **${order.ign}** | Seri: \`${serial}\`\n` +
+          `• Lý do: **${message || 'Thẻ sai hoặc đã qua sử dụng'}**`
+        );
+      }
+    }
+  }
+
+  // Chuẩn phản hồi HTTP cho TheSieuRe và Doithe1s: plain text 'OK' status 200
+  return new Response('OK', { 
+    status: 200, 
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' } 
+  });
+}
+
+// 1. GET: Nhận Callback từ TheSieuRe (URL query) HOẶC Trả log thẻ cào cho Admin Dashboard
 export async function GET(req: Request) {
   try {
+    const url = new URL(req.url);
+    const requestId = url.searchParams.get('request_id') || url.searchParams.get('requestId') || url.searchParams.get('order_id');
+    const statusParam = url.searchParams.get('status');
+
+    // NẾU CÓ THAM SỐ CỦA THESIEURE GỬI SANG (TheSieuRe Callback dùng GET) ➔ DUYỆT TỰ ĐỘNG!
+    if (requestId || statusParam !== null) {
+      const params = Object.fromEntries(url.searchParams.entries());
+      return await processCardCallback(params);
+    }
+
+    // NẾU KHÔNG CÓ THAM SỐ GẠCH THẺ ➔ ĐÂY LÀ ADMIN DASHBOARD LẤY DANH SÁCH LOGS
     if (!checkAdmin(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -90,136 +314,34 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Xử lý callback Webhook từ cổng gạch thẻ (Doithe1s/Thesieuto)
+// 2. POST: Nhận Callback từ TheSieuRe (JSON hoặc URL-encoded Form)
 export async function POST(req: Request) {
   try {
-    const supabase = getServiceClient();
-    if (!supabase) {
-      return NextResponse.json({ error: 'Chưa cấu hình Supabase' }, { status: 500 });
-    }
+    const url = new URL(req.url);
+    let params: Record<string, any> = Object.fromEntries(url.searchParams.entries());
 
-    let body: any = {};
+    let rawText = '';
     try {
-      body = await req.json();
-    } catch {
-      try {
-        const formData = await req.formData();
-        body = Object.fromEntries(formData.entries());
-      } catch {}
-    }
-
-    const status = Number(body.status);
-    const requestId = String(body.request_id || body.order_id || '');
-    const declaredValue = Number(body.declared_value || 0);
-    const realValue = Number(body.value || declaredValue);
-    const message = String(body.message || '');
-
-    if (!requestId) {
-      return NextResponse.json({ error: 'Thiếu request_id' }, { status: 400 });
-    }
-
-    // 1. Lấy thông tin đơn hàng
-    const { data: order, error: ordErr } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('id', requestId)
-      .maybeSingle();
-
-    if (ordErr || !order) {
-      return NextResponse.json({ error: 'Không tìm thấy đơn hàng' }, { status: 404 });
-    }
-
-    // Lấy link Discord Webhook
-    let adminDiscordWebhook: string | undefined;
-    try {
-      const { data: discCfg } = await supabase
-        .from('app_configs')
-        .select('value')
-        .eq('key', 'discord_webhook_url')
-        .maybeSingle();
-      if (discCfg?.value) adminDiscordWebhook = discCfg.value.trim();
+      rawText = await req.text();
     } catch {}
 
-    // Cập nhật log thẻ cào
-    try {
-      const { data: currentCfg } = await supabase
-        .from('app_configs')
-        .select('value')
-        .eq('key', 'card_transaction_logs')
-        .maybeSingle();
-
-      let cardLogs: CardLog[] = [];
-      if (currentCfg?.value) cardLogs = JSON.parse(currentCfg.value);
-
-      cardLogs = cardLogs.map((c: CardLog) => {
-        if (c.order_id === requestId) {
-          return {
-            ...c,
-            real_value: realValue,
-            status: status === 1 ? 'success' : status === 2 ? 'wrong_amount' : 'invalid',
-            message: message || (status === 1 ? 'Thẻ đúng' : 'Thẻ sai hoặc không hợp lệ')
-          };
-        }
-        return c;
-      });
-
-      await supabase.from('app_configs').upsert({
-        key: 'card_transaction_logs',
-        value: JSON.stringify(cardLogs),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'key' });
-    } catch (logErr) {
-      console.warn('Update card log error:', logErr);
-    }
-
-    // 2. Xử lý trạng thái thẻ
-    // TRƯỜNG HỢP 1: THẺ ĐÚNG (status === 1)
-    if (status === 1) {
-      if (order.status === 'pending') {
-        // Chuyển đơn sang paid_waiting
-        await supabase.from('orders').update({ status: 'paid_waiting' }).eq('id', order.id);
-
-        // Tự động trừ kho
-        await adjustStock(supabase, -Number(order.money_m));
-
-        // Tự động gửi tin nhắn vào Ticket
+    if (rawText) {
+      try {
+        const json = JSON.parse(rawText);
+        params = { ...params, ...json };
+      } catch {
         try {
-          await supabase.from('order_messages').insert([{
-            order_id: order.id,
-            sender: 'admin',
-            sender_name: 'Hệ Thống Tự Động',
-            message: `🤖 [Thẻ Cào Hợp Lệ]: Đã gạch thẻ thành công mệnh giá ${formatVND(realValue)}. Đơn hàng đã được duyệt tự động! Shop đang xử lý giao ${order.money_m}M Money cho bạn.`
-          }]);
+          const urlParams = new URLSearchParams(rawText);
+          const entries = Object.fromEntries(urlParams.entries());
+          params = { ...params, ...entries };
         } catch {}
-
-        // Bắn Discord Webhook
-        await sendDiscordNotification(
-          adminDiscordWebhook,
-          `🎉 **[GẠCH THẺ CÀO THÀNH CÔNG - ĐƠN #${order.id}]**\n` +
-          `• Khách hàng: **${order.ign}**\n` +
-          `• Mệnh giá: **${formatVND(realValue)}**\n` +
-          `• Số Money mua: **${order.money_m}M**\n` +
-          `• Hình thức: **${order.delivery_method === 'pay' ? '⚡ PAY TIỀN' : '🏪 MUA /AH'}**\n` +
-          `• Trạng thái: **Đã thanh toán -> Đang chờ bot giao hàng!**`
-        );
       }
-    } 
-    // TRƯỜNG HỢP 2: THẺ LỖI HOẶC SAI MỆNH GIÁ
-    else {
-      await sendDiscordNotification(
-        adminDiscordWebhook,
-        `❌ **[THẺ CÀO LỖI / KHÔNG THÀNH CÔNG - ĐƠN #${order.id}]**\n` +
-        `• Khách hàng: **${order.ign}**\n` +
-        `• Mệnh giá khai: **${formatVND(declaredValue)}** | Thực tế: **${formatVND(realValue)}**\n` +
-        `• Lý do: **${message || 'Thẻ sai mã, số seri hoặc đã qua sử dụng'}**\n` +
-        `• Vui lòng liên hệ khách để kiểm tra lại!`
-      );
     }
 
-    return NextResponse.json({ success: true, message: 'Received callback successfully' });
+    return await processCardCallback(params);
   } catch (error: any) {
     console.error('Card webhook error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return new Response('Error: ' + error.message, { status: 500 });
   }
 }
 

@@ -1066,7 +1066,7 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                     https://kingmc-shop.vercel.app/api/webhook/card
                   </div>
                   <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    💡 Cấu hình link này vào mục <strong>Webhook Callback</strong> trên website đổi thẻ (Doithe1s.vn / Thesieuto.net) để hệ thống tự động nhận kết quả duyệt thẻ 24/24!
+                    💡 Cấu hình link này vào mục <strong>Callback Webhook</strong> trên website TheSieuRe.com để hệ thống tự động nhận kết quả duyệt thẻ và cộng tiền tự động 24/24!
                   </p>
                 </div>
 
@@ -1565,31 +1565,20 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[11px] text-zinc-400">Endpoint API TheSieuRe</label>
-                      <input
-                        type="text"
-                        value={settings.card_gateway_url || 'https://thesieure.com/chargingws/v2'}
-                        onChange={e => setSettings({ ...settings, card_gateway_url: e.target.value.trim() })}
-                        placeholder="https://thesieure.com/chargingws/v2"
-                        className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-zinc-400">Partner ID (TheSieuRe)</label>
+                      <label className="text-[11px] text-zinc-400">Partner ID (TheSieuRe.com)</label>
                       <input
                         type="text"
                         value={settings.card_partner_id || ''}
                         onChange={e => setSettings({ ...settings, card_partner_id: e.target.value.trim() })}
-                        placeholder="Lấy tại thesieure.com"
+                        placeholder="Lấy tại thesieure.com -> Kết nối API"
                         className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[11px] text-zinc-400">Partner Key (Khóa bảo mật)</label>
+                      <label className="text-[11px] text-zinc-400">Partner Key (Khóa bí mật)</label>
                       <input
                         type="password"
                         value={settings.card_partner_key || ''}
@@ -1598,29 +1587,22 @@ export default function AdminDashboard({ pin }: AdminDashboardProps) {
                         className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-mono text-zinc-100 outline-none focus:border-amber-500"
                       />
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-zinc-400">Chiết khấu thẻ cào (%)</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="0"
-                          max="50"
-                          value={settings.card_discount_percent !== undefined ? settings.card_discount_percent : 20}
-                          onChange={e => setSettings({ ...settings, card_discount_percent: Number(e.target.value) })}
-                          placeholder="20"
-                          className="w-full rounded-xl border border-[#1e1e2e] bg-[#12121a] p-2.5 text-xs font-bold text-amber-400 outline-none focus:border-amber-500"
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 font-bold">
-                          %
-                        </div>
-                      </div>
-                    </div>
                   </div>
 
-                  <p className="text-[11px] text-zinc-500">
-                    💡 Đăng ký tài khoản tại <strong>thesieure.com</strong>, vào mục Kết Nối API điền Callback Webhook là: <code className="text-amber-300">https://kingmc-shop.vercel.app/api/webhook/card</code>. Sau đó dán Partner ID & Key vào đây để hệ thống tự động gạch thẻ!
-                  </p>
+                  <div className="rounded-xl bg-[#12121a] border border-[#1e1e2e] p-3 text-xs text-zinc-400 space-y-1.5 leading-relaxed">
+                    <p className="font-bold text-amber-300 flex items-center gap-1.5">
+                      <Terminal size={14} /> Hướng Dẫn Cấu Hình API TheSieuRe Để Tự Động Duyệt 100%:
+                    </p>
+                    <p>
+                      • <strong>IP gọi API:</strong> Hãy <u>ĐỂ TRỐNG (hoặc Xóa hết IP)</u> trong mục Kết Nối API trên TheSieuRe. (Vì website chạy trên serverless Vercel có IP thay đổi liên tục, nếu điền IP nhà thì TheSieuRe sẽ chặn request của shop).
+                    </p>
+                    <p>
+                      • <strong>Callback Webhook:</strong> Điền chính xác đường link: <code className="text-amber-400 font-mono select-all">https://kingmc-shop.vercel.app/api/webhook/card</code> để TheSieuRe tự động gửi kết quả duyệt thẻ về website 24/24!
+                    </p>
+                    <p>
+                      • <strong>Chiết khấu:</strong> Hệ thống tự động áp dụng đúng bảng phí TheSieuRe (10k-30k: 19.5% | 50k-300k: 14.5% | 500k-1M: 16.5%), không cần cấu hình thủ công.
+                    </p>
+                  </div>
                 </div>
 
                 {/* VietQR Live Preview Box */}

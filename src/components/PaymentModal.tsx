@@ -210,7 +210,12 @@ export default function PaymentModal({ order, settings, onClose, onOpenTicket, o
                   <span className="font-bold text-amber-300 text-sm">{formatVND(order.card_declared_value || order.total_vnd)}</span>
                 </div>
                 <div>
-                  <span className="text-zinc-500 block mb-0.5">Thực nhận (-{settings.card_discount_percent || 20}%):</span>
+                  {(() => {
+                    const discount = order.card_declared_value && order.card_real_value 
+                      ? Math.round((1 - order.card_real_value / order.card_declared_value) * 100) 
+                      : 15;
+                    return <span className="text-zinc-500 block mb-0.5">Thực nhận (-{discount}%):</span>;
+                  })()}
                   <span className="font-bold text-emerald-400 text-sm">{formatVND(order.card_real_value || order.total_vnd)}</span>
                 </div>
                 <div>
